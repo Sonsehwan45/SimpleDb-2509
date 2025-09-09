@@ -48,4 +48,33 @@ public class Sql {
             throw new RuntimeException(e);
         }
     }
+
+    public int update() {
+        try (Connection conn = simpleDb.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sqlBuilder.toString())) {
+
+            for (int i = 0; i < params.size(); i++) {
+                pstmt.setObject(i + 1, params.get(i));
+            }
+
+            return pstmt.executeUpdate(); // 수정된 row 수 리턴
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public int delete() {
+        try (Connection conn = simpleDb.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sqlBuilder.toString())) {
+
+            for (int i = 0; i < params.size(); i++) {
+                pstmt.setObject(i + 1, params.get(i));
+            }
+
+            return pstmt.executeUpdate(); // 삭제된 row 수 리턴
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 }
