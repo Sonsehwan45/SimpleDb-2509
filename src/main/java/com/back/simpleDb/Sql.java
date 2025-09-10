@@ -3,6 +3,7 @@ package com.back.simpleDb;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 public class Sql {
 
@@ -32,5 +33,17 @@ public class Sql {
 
     public int delete() {
         return db.updateOrDelete(querySb.toString(), args.toArray());
+    }
+
+    public List<Map<String, Object>> selectRows() {
+        return db.select(querySb.toString(), args.toArray());
+    }
+
+    public Map<String, Object> selectRow() {
+        List<Map<String, Object>> rows = this.selectRows();
+        if (rows.isEmpty()) {
+            return null;
+        }
+        return rows.get(0); // 첫 번째 row만 반환
     }
 }
