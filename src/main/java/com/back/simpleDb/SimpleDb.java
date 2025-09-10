@@ -47,9 +47,53 @@ public class SimpleDb {
         }
     }
 
+    public Sql genSql() {
+        return new Sql(this);
+    }
+
+    public long insert(String sql, Object... args) {
+        try (PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
+            for(int i=0; i<args.length; i++) {
+                pstmt.setObject(i+1, args[i]);
+            }
+
+            pstmt.executeUpdate();
+            ResultSet rs = pstmt.getGeneratedKeys();
+
+            long newId = 0;
+            if(rs.next()) {
+                newId = rs.getLong(1);
+            }
+
+            System.out.println("[sql] " + sql);
+            System.out.println("[args]" + Arrays.toString(args));
+
+            return newId;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public int updateOrDelete(String sql, Object... args) {
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)){
+
+            for(int i=0; i<args.length; i++) {
+                pstmt.setObject(i+1, args[i]);
+            }
+
+            int affectedRows = pstmt.executeUpdate(); //영향 받은 행의 수
+
+            System.out.println("[sql] " + sql);
+            System.out.println("[args]" + Arrays.toString(args));
+
+            return affectedRows;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
 
-//테스트 초기 세팅을 테스트하기 위해 임시 방편으로 main 메서드 구현
 class Main {
     public static void main(String[] args) {
         //DB 연결 테스트
