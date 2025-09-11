@@ -127,3 +127,17 @@ Map<String, Object> row = simpleDb.genSql()
     .append("SELECT * FROM article WHERE id = ?", id)
     .selectRow();
 ```
+
+## 5. 트러블 슈팅
+### 1) build.gradle.kts 관련 문제
+
+자료에 주어진 코드를 그대로 쓰려 했으나 문제 발생
+
+→ 주어진 코드에 spring 관련 의존성을 주입해 해결
+
+```java
+implementation("org.springframework.boot:spring-boot-starter")
+testImplementation("org.springframework.boot:spring-boot-starter-test")
+```
+
+## 6. 느낀점
