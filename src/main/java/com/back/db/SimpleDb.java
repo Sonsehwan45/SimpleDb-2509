@@ -39,80 +39,61 @@ public class SimpleDb {
         return DriverManager.getConnection(URL, userName, password);
     }
 
-    private <T> T runTemplate(String sql, Object[] args, Function<Statement, T> callback) {
+    // throws SQLException을 명시하기 위한 Function<PreparedStatement, T> 함수형 인터페이스
+    @FunctionalInterface
+    interface StatementCallback<T>  {
+        T apply(PreparedStatement statement) throws SQLException;
+    }
+
+    private <T> T runTemplate(String sql, Object[] args, StatementCallback<T> callback) {
+        System.out.println(sql);
+        System.out.print("====\n");
+
         try (Connection connection = getConnection();
              PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
+            // 바인딩할 값이 없을 경우 생략
             if (args != null) {
                 for (int i = 0; i < args.length; i++) {
                     statement.setObject(i + 1, args[i]);
                 }
             }
 
-            return callback.apply(statement); // 콜백 함수 실행
+            return callback.apply(statement);
 
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private <T> T runTemplate(String sql, Function<Statement, T> callback) {
+    // 바인딩할 값이 없는 경우
+    private <T> T runTemplate(String sql, StatementCallback<T> callback) {
         return runTemplate(sql, null, callback);
     }
 
-    public void run(String sql) {
-        runTemplate(sql, statement -> {
-            try {
-                return statement.executeUpdate(sql);
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
-        });
+    public void run(String sql, Object... args) {
+        System.out.println(sql);
+        runTemplate(sql, args, statement -> statement.executeUpdate());
     }
 
-    public void run(String sql, Object... args) {
-        try (Connection connection = getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            for (int i = 0; i < args.length; i++) {
-                statement.setObject(i + 1, args[i]);
-            }
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+    public void run(String sql) {
+        runTemplate(sql, statement -> statement.executeUpdate());
     }
 
     private long runInsert(String sql, Object... args) {
-        try (Connection connection = getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            for (int i = 0; i < args.length; i++) {
-                statement.setObject(i + 1, args[i]);
-            }
+        return runTemplate(sql, args, statement -> {
             statement.executeUpdate();
-
-            // 생성된 키(ID) 가져오기
             try (ResultSet rs = statement.getGeneratedKeys()) {
                 if (rs.next()) {
                     return rs.getLong(1);
                 }
+                return 0L;
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        return 0;
+        });
     }
 
     private int runUpdate(String sql, Object... args) {
-        try (Connection connection = getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            for (int i = 0; i < args.length; i++) {
-                statement.setObject(i + 1, args[i]);
-            }
-            // executeUpdate() : 쿼리를 실행하고 영향받은 row 수를 반환
-            return statement.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        return runTemplate(sql, args, statement -> statement.executeUpdate());
     }
 
     public Sql genSql() {

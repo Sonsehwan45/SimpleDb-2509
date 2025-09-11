@@ -82,3 +82,47 @@ SQL을 편리하게 작성하도록 돕는 유틸리티 객체이다.
 DriverManager의 getConnection으로 전달되는 URL은 `jdbc:드라이버명`으로 시작되는데,
 
 이 URL 정보를 통해 라이브러리에 등록된 JDBC 구현체(DB 드라이버)중 적절한 구현체를 찾아 커넥션을 획득해 클라이언트에 반환한다.
+
+## 트러블 슈팅
+### callback함수와 템플릿 메소드 패턴을 이용한 반복 코드 제거 (1차)
+
+sql을 실행시키는 run 메소드에서 getConnection -> prepareStatement 바인딩 -> resultSet반환이 반복되었다.
+
+```java
+private <T> T runTemplate(String sql, Object[] args, Function<Statement, T> callback) {
+    try (Connection connection = getConnection(); 
+         PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        
+        // 바인딩할 값이 없을 경우 생략
+        if (args != null) {
+            for (int i = 0; i < args.length; i++) {
+                statement.setObject(i + 1, args[i]);
+            }
+        }
+
+        return callback.apply(statement);
+
+    } catch (SQLException e) {
+        throw new RuntimeException(e);
+    }
+}
+
+// !! 컴파일에러 !! runTemplate에서 try - catch로 콜백 메소드를 감싸지만 의미 없는 try - catch 구문이 필요
+public void run(String sql) {
+    runTemplate(sql, statement -> statement.executeUpdate(sql));
+}
+```
+
+### try - catch 제거를 위한 함수형 인터페이스 선언
+```java
+// Function<Statemen, T> callback을 대체하면
+@FunctionalInterface
+interface StatementCallback<T> {
+    T apply(PreparedStatement statement) throws SQLException;
+}
+
+// 컴파일 에러가 발생하지 않는다!
+public void run(String sql) {
+  runTemplate(sql, statement -> statement.executeUpdate(sql));
+}
+```
