@@ -77,9 +77,10 @@ public class Sql {
      *  - ResultSet, PreparedStatement, Connection을 finally 블록에서 닫는다.
      */
     public long insert() {
-        Connection conn = null;
-        PreparedStatement pstmt = null;
-        ResultSet rs = null;
+        // DB 연결, SQL 실행, 결과 조회용 객체
+        Connection conn = null;          // DB 서버와 연결
+        PreparedStatement pstmt = null;  // SQL 준비 및 파라미터 바인딩
+        ResultSet rs = null;             // 실행 결과(생성된 키 등) 조회
 
         try {
             conn = simpleDb.getConnection();

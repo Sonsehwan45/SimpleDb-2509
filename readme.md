@@ -175,6 +175,11 @@ long newId = sql.insert();
 7. **자원 해제**  
    `ResultSet`, `PreparedStatement`, `Connection`을 `finally` 블록에서 닫습니다.
 
+### PreparedStatement, Connection, ResultSet 역할
+- Connection: DB 연결 생성 및 관리
+- PreparedStatement: SQL 실행 준비 및 파라미터 바인딩
+- ResultSet: SELECT 결과 조회 (insert에서는 생성된 키 조회)
+
 ### 정리
 - `insert()`는 SQL 실행 후 **자동 증가된 기본키(PK)**를 반환합니다.
 - 따라서 새로 추가된 행의 id 값을 추적할 수 있습니다.
