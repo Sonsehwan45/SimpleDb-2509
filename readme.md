@@ -1,541 +1,815 @@
-# 아래 테스트케이스들을 만족시켜주세요.
+# 순수 JDBC로 DB Util Class 구현하기
+
+## 구현 단위
+- 테스트 초기 설정 코드
+- t1 ~ t3: CRUD 기능 테스트
+- t4 ~ t5: 단순 조회 테스트
+- t6 ~ t9 (+ t10 ~ t11): 특정 컬럼 조회 테스트
+
+## 구현 과정 설명
+- 분석 : 테스트 코드 분석
+- 설계 : 분석한 내용을 기반으로 직관적으로 알 수 있는 내용을 구현
+- 구현 : 상세 구현
+- 리팩토링 : 구조 개선 및 사소한 기능 추가
+
+> `t01~ t11`까지의 테스트 케이스를, 위와 같은 구현 단위로 나누어 통과할 수 있도록 개발했습니다.  
+> 문서는 각 구현 단위를 분석 -> 설계 -> 구현 -> 리팩토링 하는 순서로 작성되었습니다.
+---
+
+# 1. 테스트 초기 설정 코드
+
+테스트 환경 초기화 시 실행되는 메서드
+
+- `beforeAll`
+- `beforeEach`
+- `createArticleTable`
+- `makeArticleTestData`
+
+## 분석
+
+### SimpleDb
+
+1. DB 연결
+    - 테스트 코드에서 별다른 메서드가 보이지 않는 것으로 보아 자동으로 DB 연결 수행
+2. 생성자 매개변수
+    - `(String host, String user, String passwd, String dbName)` 형태로 DB 연결 정보를 받아야 함
+3. DevMode 설정
+    - 로깅 여부를 제어할 수 있도록 `devMode` 플래그 필요
+4. run 메서드
+    - 정적 SQL과 동적 SQL 실행
+
+## 설계
+
+### SimpleDb
 
 ```java
-package com.back.simpleDb;
 
-import com.back.Article;
-import org.junit.jupiter.api.*;
+@Setter
+public class SimpleDb {
 
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.IntStream;
+    private boolean devMode;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-@TestMethodOrder(MethodOrderer.MethodName.class)
-public class SimpleDbTest {
-    private static SimpleDb simpleDb;
-
-    @BeforeAll
-    public static void beforeAll() {
-        simpleDb = new SimpleDb("localhost", "root", "lldj123414", "simpleDb__test");
-        simpleDb.setDevMode(true);
-
-        createArticleTable();
+    public SimpleDb(String host, String user, String passwd, String dbName) {
+        //TODO : DB 연결
     }
 
-    @BeforeEach
-    public void beforeEach() {
-        truncateArticleTable();
-        makeArticleTestData();
+    public void run(String sql) {
+        //TODO : 정적 sql문 처리
     }
 
-    private static void createArticleTable() {
-        simpleDb.run("DROP TABLE IF EXISTS article");
-
-        simpleDb.run("""
-                CREATE TABLE article (
-                    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-                    PRIMARY KEY(id),
-                    createdDate DATETIME NOT NULL,
-                    modifiedDate DATETIME NOT NULL,
-                    title VARCHAR(100) NOT NULL,
-                    `body` TEXT NOT NULL,
-                    isBlind BIT(1) NOT NULL DEFAULT 0
-                )
-                """);
+    public void run(String sql, Object... args) {
+        //TODO : 동적 sql문 처리
     }
+}
 
-    private void makeArticleTestData() {
-        IntStream.rangeClosed(1, 6).forEach(no -> {
-            boolean isBlind = no > 3;
-            String title = "제목%d".formatted(no);
-            String body = "내용%d".formatted(no);
+```
 
-            simpleDb.run("""
-                    INSERT INTO article
-                    SET createdDate = NOW(),
-                    modifiedDate = NOW(),
-                    title = ?,
-                    `body` = ?,
-                    isBlind = ?
-                    """, title, body, isBlind);
-        });
-    }
+**설계 포인트**
 
-    private void truncateArticleTable() {
-        simpleDb.run("TRUNCATE article");
-    }
+1. 생성자에서 DB 연결
+    - 테스트 코드에서 별도 연결 메서드 호출이 없음  
+      → 생성자에서 자동 연결
+    - 요구사항에 의하면, 스레드 별로 독립적인 Connection 유지되어야 함  + `.close()` 호출 전까지 연결 유지  
+      → SimpleDb 객체가 Connection 1개 소유
+2. 동적 SQL 처리
+    - 파라미터 개수와 타입이 가변적일 수도 있다고 생각
 
-    @Test
-    @DisplayName("insert")
-    public void t001() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        INSERT INTO article
-        SET createdDate = NOW() ,
-        modifiedDate = NOW() ,
-        title = '제목 new' ,
-        body = '내용 new'
-        */
-        sql.append("INSERT INTO article")
-                .append("SET createdDate = NOW()")
-                .append(", modifiedDate = NOW()")
-                .append(", title = ?", "제목 new")
-                .append(", body = ?", "내용 new");
+      → `Object... args`로 받아 확장성 확보
 
-        long newId = sql.insert(); // AUTO_INCREMENT 에 의해서 생성된 주키 리턴
 
-        assertThat(newId).isGreaterThan(0);
-    }
+## 구현
 
-    @Test
-    @DisplayName("update")
-    public void t002() {
-        Sql sql = simpleDb.genSql();
+### SimpleDb
 
-        // id가 0, 1, 2, 3인 글 수정
-        // id가 0인 글은 없으니, 실제로는 3개의 글이 삭제됨
+```java
+@Setter
+public class SimpleDb {
 
-        /*
-        == rawSql ==
-        UPDATE article
-        SET title = '제목 new'
-        WHERE id IN ('0', '1', '2', '3')
-        */
-        sql.append("UPDATE article")
-                .append("SET title = ?", "제목 new")
-                .append("WHERE id IN (?, ?, ?, ?)", 0, 1, 2, 3);
+    private boolean devMode;
+    private Connection conn;
 
-        // 수정된 row 개수
-        int affectedRowsCount = sql.update();
-
-        assertThat(affectedRowsCount).isEqualTo(3);
-    }
-
-    @Test
-    @DisplayName("delete")
-    public void t003() {
-        Sql sql = simpleDb.genSql();
-
-        // id가 0, 1, 3인 글 삭제
-        // id가 0인 글은 없으니, 실제로는 2개의 글이 삭제됨
-        /*
-        == rawSql ==
-        DELETE FROM article
-        WHERE id IN ('0', '1', '3')
-        */
-        sql.append("DELETE")
-                .append("FROM article")
-                .append("WHERE id IN (?, ?, ?)", 0, 1, 3);
-
-        // 삭제된 row 개수
-        int affectedRowsCount = sql.delete();
-
-        assertThat(affectedRowsCount).isEqualTo(2);
-    }
-
-    @Test
-    @DisplayName("selectRows")
-    public void t004() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT *
-        FROM article
-        ORDER BY id ASC
-        LIMIT 3
-        */
-        sql.append("SELECT * FROM article ORDER BY id ASC LIMIT 3");
-        List<Map<String, Object>> articleRows = sql.selectRows();
-
-        IntStream.range(0, articleRows.size()).forEach(i -> {
-            long id = i + 1;
-
-            Map<String, Object> articleRow = articleRows.get(i);
-
-            assertThat(articleRow.get("id")).isEqualTo(id);
-            assertThat(articleRow.get("title")).isEqualTo("제목%d".formatted(id));
-            assertThat(articleRow.get("body")).isEqualTo("내용%d".formatted(id));
-            assertThat(articleRow.get("createdDate")).isInstanceOf(LocalDateTime.class);
-            assertThat(articleRow.get("createdDate")).isNotNull();
-            assertThat(articleRow.get("modifiedDate")).isInstanceOf(LocalDateTime.class);
-            assertThat(articleRow.get("modifiedDate")).isNotNull();
-            assertThat(articleRow.get("isBlind")).isEqualTo(false);
-        });
-    }
-
-    @Test
-    @DisplayName("selectRow")
-    public void t005() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT *
-        FROM article
-        WHERE id = 1
-        */
-        sql.append("SELECT * FROM article WHERE id = 1");
-        Map<String, Object> articleRow = sql.selectRow();
-
-        assertThat(articleRow.get("id")).isEqualTo(1L);
-        assertThat(articleRow.get("title")).isEqualTo("제목1");
-        assertThat(articleRow.get("body")).isEqualTo("내용1");
-        assertThat(articleRow.get("createdDate")).isInstanceOf(LocalDateTime.class);
-        assertThat(articleRow.get("createdDate")).isNotNull();
-        assertThat(articleRow.get("modifiedDate")).isInstanceOf(LocalDateTime.class);
-        assertThat(articleRow.get("modifiedDate")).isNotNull();
-        assertThat(articleRow.get("isBlind")).isEqualTo(false);
-    }
-
-    @Test
-    @DisplayName("selectDatetime")
-    public void t006() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT NOW()
-        */
-        sql.append("SELECT NOW()");
-
-        LocalDateTime datetime = sql.selectDatetime();
-
-        long diff = ChronoUnit.SECONDS.between(datetime, LocalDateTime.now());
-
-        assertThat(diff).isLessThanOrEqualTo(1L);
-    }
-
-    @Test
-    @DisplayName("selectLong")
-    public void t007() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT id
-        FROM article
-        WHERE id = 1
-        */
-        sql.append("SELECT id")
-                .append("FROM article")
-                .append("WHERE id = 1");
-
-        Long id = sql.selectLong();
-
-        assertThat(id).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("selectString")
-    public void t008() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT title
-        FROM article
-        WHERE id = 1
-        */
-        sql.append("SELECT title")
-                .append("FROM article")
-                .append("WHERE id = 1");
-
-        String title = sql.selectString();
-
-        assertThat(title).isEqualTo("제목1");
-    }
-
-    @Test
-    @DisplayName("selectBoolean")
-    public void t009() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT isBlind
-        FROM article
-        WHERE id = 1
-        */
-        sql.append("SELECT isBlind")
-                .append("FROM article")
-                .append("WHERE id = 1");
-
-        Boolean isBlind = sql.selectBoolean();
-
-        assertThat(isBlind).isEqualTo(false);
-    }
-
-    @Test
-    @DisplayName("selectBoolean, 2nd")
-    public void t010() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT 1 = 1
-        */
-        sql.append("SELECT 1 = 1");
-
-        Boolean isBlind = sql.selectBoolean();
-
-        assertThat(isBlind).isEqualTo(true);
-    }
-
-    @Test
-    @DisplayName("selectBoolean, 3rd")
-    public void t011() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT 1 = 0
-        */
-        sql.append("SELECT 1 = 0");
-
-        Boolean isBlind = sql.selectBoolean();
-
-        assertThat(isBlind).isEqualTo(false);
-    }
-
-    @Test
-    @DisplayName("select, LIKE 사용법")
-    public void t012() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT COUNT(*)
-        FROM article
-        WHERE id BETWEEN '1' AND '3'
-        AND title LIKE CONCAT('%', '제목' '%')
-        */
-        sql.append("SELECT COUNT(*)")
-                .append("FROM article")
-                .append("WHERE id BETWEEN ? AND ?", 1, 3)
-                .append("AND title LIKE CONCAT('%', ? '%')", "제목");
-
-        long count = sql.selectLong();
-
-        assertThat(count).isEqualTo(3);
-    }
-
-    @Test
-    @DisplayName("appendIn")
-    public void t013() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT COUNT(*)
-        FROM article
-        WHERE id IN ('1', '2', '3')
-        */
-        sql.append("SELECT COUNT(*)")
-                .append("FROM article")
-                .appendIn("WHERE id IN (?)", 1, 2, 3);
-
-        long count = sql.selectLong();
-
-        assertThat(count).isEqualTo(3);
-    }
-
-    @Test
-    @DisplayName("selectLongs, ORDER BY FIELD 사용법")
-    public void t014() {
-        Long[] ids = new Long[]{2L, 1L, 3L};
-
-        Sql sql = simpleDb.genSql();
-        /*
-        SELECT id
-        FROM article
-        WHERE id IN ('2', '3', '1')
-        ORDER BY FIELD (id, '2', '3', '1')
-        */
-        sql.append("SELECT id")
-                .append("FROM article")
-                .appendIn("WHERE id IN (?)", ids)
-                .appendIn("ORDER BY FIELD (id, ?)", ids);
-
-        List<Long> foundIds = sql.selectLongs();
-
-        assertThat(foundIds).isEqualTo(Arrays.stream(ids).toList());
-    }
-
-    @Test
-    @DisplayName("selectRows, Article")
-    public void t015() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT *
-        FROM article
-        ORDER BY id ASC
-        LIMIT 3
-        */
-        sql.append("SELECT * FROM article ORDER BY id ASC LIMIT 3");
-        List<Article> articleRows = sql.selectRows(Article.class);
-
-        IntStream.range(0, articleRows.size()).forEach(i -> {
-            long id = i + 1;
-
-            Article article = articleRows.get(i);
-
-            assertThat(article.getId()).isEqualTo(id);
-            assertThat(article.getTitle()).isEqualTo("제목%d".formatted(id));
-            assertThat(article.getBody()).isEqualTo("내용%d".formatted(id));
-            assertThat(article.getCreatedDate()).isInstanceOf(LocalDateTime.class);
-            assertThat(article.getCreatedDate()).isNotNull();
-            assertThat(article.getModifiedDate()).isInstanceOf(LocalDateTime.class);
-            assertThat(article.getModifiedDate()).isNotNull();
-            assertThat(article.isBlind()).isEqualTo(false);
-        });
-    }
-
-    @Test
-    @DisplayName("selectRow, Article")
-    public void t016() {
-        Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT *
-        FROM article
-        WHERE id = 1
-        */
-        sql.append("SELECT * FROM article WHERE id = 1");
-        Article article = sql.selectRow(Article.class);
-
-        Long id = 1L;
-
-        assertThat(article.getId()).isEqualTo(id);
-        assertThat(article.getTitle()).isEqualTo("제목%d".formatted(id));
-        assertThat(article.getBody()).isEqualTo("내용%d".formatted(id));
-        assertThat(article.getCreatedDate()).isInstanceOf(LocalDateTime.class);
-        assertThat(article.getCreatedDate()).isNotNull();
-        assertThat(article.getModifiedDate()).isInstanceOf(LocalDateTime.class);
-        assertThat(article.getModifiedDate()).isNotNull();
-        assertThat(article.isBlind()).isEqualTo(false);
-    }
-
-    // 테스트 메서드를 정의하고, 테스트 이름을 지정합니다.
-    @Test
-    @DisplayName("use in multi threading")
-    public void t017() throws InterruptedException {
-        // 쓰레드 풀의 크기를 정의합니다.
-        int numberOfThreads = 10;
-
-        // 고정 크기의 쓰레드 풀을 생성합니다.
-        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
-
-        // 성공한 작업의 수를 세는 원자적 카운터를 생성합니다.
-        AtomicInteger successCounter = new AtomicInteger(0);
-
-        // 동시에 실행되는 작업의 수를 세는 데 사용되는 래치를 생성합니다.
-        CountDownLatch latch = new CountDownLatch(numberOfThreads);
-
-        // 각 쓰레드에서 실행될 작업을 정의합니다.
-        Runnable task = () -> {
-            try {
-                // SimpleDB에서 SQL 객체를 생성합니다.
-                Sql sql = simpleDb.genSql();
-
-                // SQL 쿼리를 작성합니다.
-                sql.append("SELECT * FROM article WHERE id = 1");
-
-                // 쿼리를 실행하여 결과를 Article 객체로 매핑합니다.
-                Article article = sql.selectRow(Article.class);
-
-                // 기대하는 Article 객체의 ID를 정의합니다.
-                Long id = 1L;
-
-                // Article 객체의 값이 기대하는 값과 일치하는지 확인하고,
-                // 일치하는 경우 성공 카운터를 증가시킵니다.
-                if (article.getId() == id &&
-                        article.getTitle().equals("제목%d".formatted(id)) &&
-                        article.getBody().equals("내용%d".formatted(id)) &&
-                        article.getCreatedDate() != null &&
-                        article.getModifiedDate() != null &&
-                        !article.isBlind()) {
-                    successCounter.incrementAndGet();
-                }
-            } finally {
-                // 커넥션 종료
-                simpleDb.close();
-                // 작업이 완료되면 래치 카운터를 감소시킵니다.
-                latch.countDown();
-            }
-        };
-
-        // 쓰레드 풀에서 쓰레드를 할당받아 작업을 실행합니다.
-        for (int i = 0; i < numberOfThreads; i++) {
-            executorService.submit(task);
+    public SimpleDb(String host, String user, String passwd, String dbName) {
+        //DB 연결
+        try {
+            String url = "jdbc:mysql://" + host + "/" + dbName + "?useSSL=false&serverTimezone=Asia/Seoul";
+            this.conn = DriverManager.getConnection(url, user, passwd);
+            System.out.println("DB 연결 성공");
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
+     }
 
-        // 모든 작업이 완료될 때까지 대기하거나, 최대 10초 동안 대기합니다.
-        latch.await(10, TimeUnit.SECONDS);
-
-        // 쓰레드 풀을 종료시킵니다.
-        executorService.shutdown();
-
-        // 성공 카운터가 쓰레드 수와 동일한지 확인합니다.
-        assertThat(successCounter.get()).isEqualTo(numberOfThreads);
+    public void run(String sql, Object... args) {
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)){
+            
+            //파라미터 설정
+            for(int i=0; i<args.length; i++) {
+                pstmt.setObject(i+1, args[i]);
+            }
+            
+            //쿼리 실행
+            int rs = pstmt.executeUpdate();
+            
+            //로깅
+            System.out.println("[sql] " + sql);
+            System.out.println("[args]" + Arrays.toString(args));
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    @Test
-    @DisplayName("rollback")
-    public void t018() {
-        // SimpleDB에서 SQL 객체를 생성합니다.
-        long oldCount = simpleDb.genSql()
-                .append("SELECT COUNT(*)")
-                .append("FROM article")
-                .selectLong();
+}
 
-        // 트랜잭션을 시작합니다.
-        simpleDb.startTransaction();
+```
+**구현 포인트**
 
-        simpleDb.genSql()
-                .append("INSERT INTO article ")
-                .append("(createdDate, modifiedDate, title, body)")
-                .appendIn("VALUES (NOW(), NOW(), ?)", "새 제목", "새 내용")
-                .insert();
+1. `conn`을 멤버 필드로 선언
+    - 요구사항에 맞게 SimpleDb 객체가 하나의 Connection을 갖도록 구현
+    - 외부에서 접근할 수 없게 Private으로 선언
+2. 정적 SQL 처리, 동적 SQL 처리 통합
+    - `Object… args`는 파라미터를 전달하지 않아도 문제없이 동작  
+      → 따라서 굳이 구분하지 않고 구현
+3. 로깅 로직 추가
+    - SQL 실행 과정 확인 가능
 
-        simpleDb.rollback();
+**추가 포인트**
 
-        long newCount = simpleDb.genSql()
-                .append("SELECT COUNT(*)")
-                .append("FROM article")
-                .selectLong();
+1. run에서 조회 작업이 아니라 CRUD 쿼리만 들어온다고 생각하고 executeUpdate로 고정시킴   
+   하지만, 이 부분은 확장성을 고려했을 때 추후에 보완하는게 좋아보임
 
-        assertThat(newCount).isEqualTo(oldCount);
+## 리팩토링
+
+### SimpleDb
+
+```java
+
+@Setter
+public class SimpleDb {
+
+    private boolean devMode;
+    private Connection conn;
+
+    public SimpleDb(String host, String user, String passwd, String dbName) {
+        String url = "jdbc:mysql://" + host + "/" + dbName + "?useSSL=false&serverTimezone=Asia/Seoul";
+        connectDb(url, user, passwd);
     }
 
-    @Test
-    @DisplayName("commit")
-    public void t019() {
-        // SimpleDB에서 SQL 객체를 생성합니다.
-        long oldCount = simpleDb.genSql()
-                .append("SELECT COUNT(*)")
-                .append("FROM article")
-                .selectLong();
+    //DB 연결
+    private void connectDb(String url, String user, String passwd) {
+        try {
+            this.conn = DriverManager.getConnection(url, user, passwd);
+            System.out.println("DB 연결 성공");
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
-        // 트랜잭션을 시작합니다.
-        simpleDb.startTransaction();
+    //SQL 로그
+    private void logSql(String sql, Object... args) {
+        if (!devMode) {
+            return;
+        }
+        System.out.println("========== SQL ==========");
+        System.out.println("sql " + sql);
+        System.out.println("args " + Arrays.toString(args));
+    }
 
-        simpleDb.genSql()
-                .append("INSERT INTO article ")
-                .append("(createdDate, modifiedDate, title, body)")
-                .appendIn("VALUES (NOW(), NOW(), ?)", "새 제목", "새 내용")
-                .insert();
+    //에러 로그
+    private void logErr(SQLException e, String sql, Object... args) {
+        if (!devMode) {
+            return;
+        }
+        System.err.println("========== ERROR ==========");
+        System.err.println("sql " + sql);
+        System.err.println("args " + Arrays.toString(args));
+        e.printStackTrace(System.err);
+    }
 
-        simpleDb.commit();
+    //파라미터 바인딩
+    private void setArgs(PreparedStatement pstmt, Object... args) throws SQLException {
+        for (int i = 0; i < args.length; i++) {
+            pstmt.setObject(i + 1, args[i]);
+        }
+    }
 
-        long newCount = simpleDb.genSql()
-                .append("SELECT COUNT(*)")
-                .append("FROM article")
-                .selectLong();
+    //SimpleDB에서 정적/동적 SQL 실행
+    public void run(String sql, Object... args) {
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-        assertThat(newCount).isEqualTo(oldCount + 1);
+            setArgs(pstmt, args);
+
+            pstmt.executeUpdate();
+
+            logSql(sql, args);
+        } catch (SQLException e) {
+            logErr(e, sql, args);
+            throw new RuntimeException(e);
+        }
+    }
+}
+
+```
+
+**리팩토링 포인트**
+
+1. DB 연결 로직 분리
+    - 생성자의 가독성을 높이기 위해 `connectDb`로 DB 연결 로직 분리
+2. `devMode`에 따른 로깅
+    - `devMode` 플래그로 로깅 출력 제어
+    - `logSql`로 로직 분리
+3. `logErr` 구현
+4. 공통 로직 분리
+    - `setArgs`로 파라미터 바인딩 책임 위임
+
+---
+
+# 2. CRUD 테스트
+
+CRUD 테스트를 위해 실행되는 메서드
+
+- `t1`
+- `t2`
+- `t3`
+
+## 분석
+
+### SimpleDb
+
+1. `genSql` : Sql 객체를 반환
+
+### Sql
+
+1. `append` : 기존 SQL 문자열 뒤에 SQL 문자열을 이어 붙이는 기능
+2. `insert` : 현재 SQL문을 실행 + `AUTO_INCREMENT` 로 생성된 PK 반환
+3. `update` & `delete` : 현재 SQL문을 실행 + 영향받은 행의 수를 반환
+
+---
+
+## 설계
+
+### SimplDb
+
+```java
+@Setter
+public class SimpleDb {
+
+    //... 생략
+
+    public Sql genSql() {
+        return new Sql(this);
     }
 }
 ```
+
+**설계 포인트**
+
+1. `genSql` 실행 시 현재 `SimpleDb` 객체 전달
+    - 하나의 스레드에서 하나의 DB 연결을 사용해야 함
+    - Sql 객체가 생성될 때, 이미 존재하는 SimpleDb 객체를 사용해야 함 (별도로 다른 SimpleDb 객체를 통해 DB 연결 해서는 안 됨)
+
+### Sql
+
+```java
+public class Sql {
+
+    private final SimpleDb db;
+    StringBuffer querySb = new StringBuffer();
+
+    public Sql(SimpleDb db) {
+        this.db = db;
+    }
+
+    public Sql append(String sql, Object... args) {
+        //TODO : 기존 SQL 구문에 절 추가
+    }
+
+    public long insert() {
+        //TODO : SQL문을 통해 DB에 반영 후, 새로 생성된 row의 id 가져오기
+    }
+
+    public int update() {
+        //TODO : SQL문을 통해 DB에 반영 후, 영향을 받은 row의 수 가져오기(즉, 수정된 row의 수)
+    }
+
+    public int delete() {
+        //TODO : SQL문을 통해 DB에 반영 후, 영향을 받은 row의 수 가져오기(즉, 삭제된 row의 수)
+    }
+}
+```
+
+**설계 포인트**
+
+1. 생성자 매개변수
+    - `SImpleDb` 객체를 받아 기존 SimpleDb 객체를 재사용
+2. `StringBuffer`
+    - `append` 시 원할하게 Sql 절을 추가 가능
+    - 추후 멀티 스레드 환경을 고려해 `StringBuilder`가 아닌 `StringBuffer` 를 사용
+
+---
+
+## 구현
+
+### Sql
+
+```java
+public class Sql {
+
+    private final SimpleDb db;
+    StringBuffer querySb = new StringBuffer();
+    List<Object> args = new ArrayList<Object>();
+
+    public Sql(SimpleDb db) {
+        this.db = db;
+    }
+
+    public Sql append(String sql, Object... args) {
+        querySb.append(sql).append(" ");
+        if(args != null && args.length > 0) {
+            this.args.addAll(Arrays.asList(args));
+        }
+        return this;
+    }
+
+    public long insert() {
+        return db.insert(querySb.toString(), args.toArray());
+    }
+
+    public int update() {
+        return db.updateOrDelete(querySb.toString(), args.toArray());
+    }
+
+    public int delete() {
+        return db.updateOrDelete(querySb.toString(), args.toArray());
+    }
+}
+
+```
+
+**구현 포인트**
+
+1. 책임 분리
+   - `Sql` : SQL 구문 빌드
+   - `SimpleDb` : SQL 실행
+   - insert / update / delete 내부에서 SimpleDb 메서드 호출하여 쿼리 실행
+2. `List<Object> args`
+   - `append` 시 파라미터를 누적 저장
+
+### SimpleDb
+
+```java
+@Setter
+public class SimpleDb {
+
+	//...생략
+
+    public Sql genSql() {
+        return new Sql(this);
+    }
+ 
+    public long insert(String sql, Object... args) {
+        try (PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
+            //파라미터 바인딩
+            setArgs(pstmt, args);
+
+            //쿼리 실행
+            pstmt.executeUpdate();
+            
+            //PK 얻기
+            ResultSet rs = pstmt.getGeneratedKeys();
+            long newId = 0;
+            if(rs.next()) {
+                //첫번째 행이 PK, 타입은 Long
+                newId = rs.getLong(1); 
+            }
+						
+            //로깅
+            logSql(sql, args);
+
+            return newId;
+        } catch (SQLException e) {
+		        logErr(e, sql, args);
+            throw new RuntimeException(e);
+        }
+    }
+
+    public int updateOrDelete(String sql, Object... args) {
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)){
+
+            //파라미터 바인딩
+            setArgs(pstmt, args);
+
+            //쿼리 실행
+            int affectedRows = pstmt.executeUpdate();
+
+            //로깅
+            logSql(sql, args);
+            
+            return affectedRows;
+        } catch (SQLException e) {
+		        logErr(e, sql, args);
+            throw new RuntimeException(e);
+        }
+    }
+}
+
+```
+
+**구현 포인트**
+
+1. 책임 분리
+    - `Sql` : SQL 구문 빌드
+    - `SimpleDb` : SQL 실행
+2. `update` &`delete`
+    - 영향받은 row 수를 반환하므로 로직이 같아 하나의 메서드로 구현
+
+---
+
+# 3. 단순 조회 테스트
+
+단순 조회 테스트를 위해 실행되는 메서드
+
+- `t4`
+- `t5`
+
+## 분석
+
+### Sql
+
+1. `Map<String, Object>` or `List<Map<String, Object>>`
+    - String : DB 컬럼 명
+    - Object : 컬럼 값
+    - Map 하나가 하나의 row
+
+---
+
+## 설계
+
+### Sql
+
+```java
+public class Sql {
+    
+    //...생략
+
+    public List<Map<String, Object>> selectRows() {
+        // TODO : 다건 조회
+    }
+
+    public Map<String, Object> selectRow() {
+        // TODO : 단건 조회
+    }
+}
+```
+
+### SimpleDb
+
+```java
+@Setter
+public class SimpleDb {
+
+    //...생략
+
+    public List<Map<String, Object>> selectRows(String sql, Object... args) {
+        //TODO : 다건 조회 및 결과 가공
+    }
+
+    public Map<String, Object> selectRow(String sql, Object... args) {
+        //TODO : 단건 조회 및 결과 가공
+    }
+}
+
+```
+
+**설계 포인트**
+
+1. 결과 처리 위치 결정
+    - `SELECT` 문 실행 시 반환 값은 `ResultSet`
+    - 1안
+        - `SimpleDb`의 `select` 메서드는 `resultSet`을 반환
+        - `Sql`의 `selectRows`와 `selectRow`에서 원하는 값으로 반환값으로 가공
+        - 장점 : `SimpleDb` 는 단순 조회만 담당하므로 유연하게 재사용 가능
+    - 2안
+        - `SimpleDb`에서 `selectRows`와, `selectRow` 메서드는 가공된 데이터 반환
+        - `Sql`에서는 `SimpleDb`의 반환값을 그대로 반환
+        - 장점 : `Sql`에서 그대로 사용할 수 있어 편리함
+    - 판단
+        - 처음에는 1안으로 진행했지만 문제 발생
+          - (t6~t11)모두 단건 조회를 기반으로 하여, 결과 처리 로직이 반복될 것이 예상됨
+          - ResultSet 처리 중 발생하는 `SQLException`을 `Sql`와 `SimpleDb` 모두에서 처리해야 함
+        - 위와같은 이유로 2안으로 다시 진행함
+
+---
+
+## 구현
+
+### Sql
+
+```java
+public class Sql {
+
+    //...생략
+    
+    public List<Map<String, Object>> selectRows() {
+        return db.selectRows(querySb.toString(), args.toArray());
+    }
+
+    public Map<String, Object> selectRow() {
+        return db.selectRow(querySb.toString(), args.toArray());
+    }
+}
+
+```
+
+### SimpleDb
+
+```java
+@Setter
+public class SimpleDb {
+
+		//...생략
+
+    public List<Map<String, Object>> selectRows(String sql, Object... args) {
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)){
+						
+						//파라미터 바인딩
+            setArgs(pstmt, args);
+						
+						//쿼리 실행 및 결과 처리
+            try(ResultSet rs = pstmt.executeQuery()) {
+                logSql(sql, args);
+
+                //조회된 데이터 저장할 List
+                List<Map<String, Object>> rows = new ArrayList<>();
+
+								//컬럼 수
+                ResultSetMetaData metaData = rs.getMetaData();
+                int columnCount = metaData.getColumnCount();
+								
+								//결과 매핑
+                while (rs.next()) {
+                    Map<String, Object> row = new HashMap<>();
+                    for (int i = 1; i <= columnCount; i++) {
+		                    //컬럼명 (key)
+                        String columnName = metaData.getColumnName(i);
+                        
+                        //컬럼 실제 값 (value)
+                        Object value = rs.getObject(i);
+                        
+                        //하나의 데이터를 Map으로 매핑
+                        row.put(columnName, value);
+                    }
+                    //리스트에 저장
+                    rows.add(row);
+                }
+
+                return rows;
+            }
+        } catch (SQLException e) {
+            logErr(e, sql, args);
+            throw new RuntimeException(e);
+        }
+    }
+
+    public Map<String, Object> selectRow(String sql, Object... args) {
+        //selectRows 메서드를 재사용, List에서 첫번째 값만 가져오기
+        List<Map<String,Object>> rows = selectRows(sql, args);
+        if (rows == null || rows.isEmpty()) {
+            return null;
+        }
+        return rows.getFirst();
+    }
+}
+```
+
+**구현 포인트**
+
+1. selectRow에서 selectRows 메서드 사용
+2. 컬럼 기반 매핑
+    - ResultSetMetaData를 이용하여 컬럼명을 확인
+    - DB 컬럼명 과 실제 값을 Map으로 매핑
+3. 단건 조회 처리
+    - `selectRow` 에서 `selectRows` 를 재사용하여 단건 조회 구현
+
+---
+
+# 4. 특정 컬럼 조회 테스트
+
+단순 조회 테스트를 위해 실행되는 메서드
+
+- `t6` ~ `t9`
+- `t10` ~ `t11`
+
+## 분석
+
+### Sql
+
+1. `selectLong` : Long 타입 컬럼값 반환
+2. `selectString` : String 타입 컬럼값 반환
+3. `selectBoolean` : Boolean 타입 컬럼값 반환
+4. 공통 : 단건 조회 기반, 특정 컬럼값 반환
+
+---
+
+## 설계
+
+```java
+public class Sql {
+
+    //...생략
+
+    public LocalDateTime selectDatetime() {
+        //TODO : 단건 조회 후 LocalDateTime 타입이면 반환
+    }
+
+    public Long selectLong() {
+        //TODO : 단건 조회 후 Long 타입이면 반환
+    }
+
+    public String selectString() {
+        //TODO : 단건 조회 후 String 타입이면 반환
+    }
+
+    public Boolean selectBoolean() {
+        //TODO : 단건 조회 후 Boolean 타입이면 반환
+    }
+}
+```
+---
+
+## 구현
+
+```java
+public class Sql {
+
+    //...생략
+
+    public LocalDateTime selectDatetime() {
+        Map<String, Object> row = db.selectRow(querySb.toString(), args.toArray());
+        if(row == null) {
+            return null;
+        }
+        
+        for(Object value : row.values()) {
+            //value의 타입이 반환값 타입과 일치하면 반환
+            System.out.println(value.getClass().getName());
+            if(value instanceof LocalDateTime) {
+                return (LocalDateTime) value;
+            }
+        }
+        return null;
+    }
+
+    public Long selectLong() {
+        Map<String, Object> row = db.selectRow(querySb.toString(), args.toArray());
+        if(row == null) {
+            return null;
+        }
+        for(Object value : row.values()) {
+            System.out.println(value.getClass().getName());
+            if(value instanceof Long) {
+                return (Long) value;
+            }
+        }
+        return null;
+    }
+
+    public String selectString() {
+        Map<String, Object> row = db.selectRow(querySb.toString(), args.toArray());
+        if(row == null) {
+            return null;
+        }
+        for(Object value : row.values()) {
+            System.out.println(value.getClass().getName());
+            if(value instanceof String) {
+                return (String) value;
+            }
+        }
+        return null;
+    }
+
+    public Boolean selectBoolean() {
+        Map<String, Object> row = db.selectRow(querySb.toString(), args.toArray());
+        if(row == null) {
+            return null;
+        }
+        for(Object value : row.values()) {
+            System.out.println(value.getClass().getName());
+            if(value instanceof Boolean) {
+                return (Boolean) value;
+            }
+        }
+        return null;
+    }
+}
+
+```
+
+**구현 포인트**
+
+1. 단일값 추출
+    - `selectRow`를 통해 단일 row 조회한 뒤, 컬럼값 중 첫 번째 값을 반환
+    - 단건 조회 후 특정 타입으로 변환
+2. 타입 안정성 처리
+    - `instanceof`로 값 타입을 확인 후 변환
+    - DB에서 조회된 타입이 예상과 다를 경우 `null` 반환
+3. 결과 없는 경우 처리
+    - 조회 결과 없으면 바로 `null` 반환
+
+---
+
+## 리팩토링
+
+```java
+public class Sql {
+
+    //...생략
+    
+    private <T> T selectColumn(Class<T> type) {
+        //단건 조회
+        Map<String, Object> row = db.selectRow(querySb.toString(), args.toArray());
+        if(row == null || row.isEmpty()) return null;
+        
+        //첫번째 컬럼값 가져오기
+        Object value = row.values().iterator().next();
+
+        //타입 일치 시 반환
+        if(type.isInstance(value)) {
+            return (T) value;
+        }
+
+        return null;
+    }
+
+    public LocalDateTime selectDatetime() {
+        return selectColumn(LocalDateTime.class);
+    }
+
+    public Long selectLong() {
+        return selectColumn(Long.class);
+    }
+
+    public String selectString() {
+        return selectColumn(String.class);
+    }
+
+    public Boolean selectBoolean() {
+        return selectColumn(Boolean.class);
+    }
+}
+
+```
+
+**리팩토링 포인트**
+
+1. 중복 제거 및 공통화
+    - 기존  `selectDatetime`, `selectLong`, `selectString`, `selectBoolean` 은
+      로직은 같으나 구별해야하는 Class 타입이 달랐음
+    - 제네릭을 통해 메서드에서 중복되는 로직 분리
+    - `selectColumn` : `db.selectRow`  + 타입 변환 로직
+2. 불필요한 for문 제거
+    - 이전 구현에서는 `for(Object value : row.values())`로 구현했지만, 실제로는 첫 번째 컬럼만 필요해서 비효율적이라고 생각
+    - `row.values().iterator().next()`는 순회없이 첫번째 칼럼만 가져올 수 있어 간결하게 처리 가능
+
+---
+
+## Boolean 일 때 예외 처리
+
+```java
+public class Sql {
+
+    //...생략
+    
+    private <T> T selectColumn(Class<T> type) {
+        Map<String, Object> row = db.selectRow(querySb.toString(), args.toArray());
+        if(row == null || row.isEmpty()) return null;
+
+        Object value = row.values().iterator().next();
+
+       /**
+        * Boolean은 타입이 일치할 때 외에도
+        * Long 타입일 때도 처리해줘야 함 (1 = ture, 0 = false)
+        */
+       if(type == Boolean.class) {
+            if(value instanceof Long) {
+                return (T) Boolean.valueOf(((Long) value).longValue() != 0);
+            }
+        }
+
+        if(type.isInstance(value)) {
+            return (T) value;
+        }
+
+        return null;
+    }
+
+    //...생략
+}
+
+```
+
+**기능 추가 포인트**
+
+1. `Long` → `Boolean` 변환 처리
+    - `SELECT 1 = 1`, `SELECT 1 = 0` 같은 쿼리에서 반환값이 1, 0으로 나올 수 있음
+    - Boolean 타입일 경우, Long 값을 true/false로 변환하도록 로직 추가
