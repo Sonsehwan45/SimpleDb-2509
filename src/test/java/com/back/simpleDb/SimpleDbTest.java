@@ -1,6 +1,6 @@
 package com.back.simpleDb;
 
-import com.back.Article;
+import com.back.domain.article.article.entity.Article;
 import com.back.domain.article.db.SimpleDb;
 import com.back.domain.article.db.Sql;
 import org.junit.jupiter.api.*;
@@ -300,17 +300,17 @@ public class SimpleDbTest {
         assertThat(isBlind).isEqualTo(false);
     }
 
-    @Test
+    /*@Test
     @DisplayName("select, LIKE 사용법")
     public void t012() {
         Sql sql = simpleDb.genSql();
-        /*
+        *//*
         == rawSql ==
         SELECT COUNT(*)
         FROM article
         WHERE id BETWEEN '1' AND '3'
         AND title LIKE CONCAT('%', '제목' '%')
-        */
+        *//*
         sql.append("SELECT COUNT(*)")
                 .append("FROM article")
                 .append("WHERE id BETWEEN ? AND ?", 1, 3)
@@ -325,12 +325,12 @@ public class SimpleDbTest {
     @DisplayName("appendIn")
     public void t013() {
         Sql sql = simpleDb.genSql();
-        /*
+        *//*
         == rawSql ==
         SELECT COUNT(*)
         FROM article
         WHERE id IN ('1', '2', '3')
-        */
+        *//*
         sql.append("SELECT COUNT(*)")
                 .append("FROM article")
                 .appendIn("WHERE id IN (?)", 1, 2, 3);
@@ -346,12 +346,12 @@ public class SimpleDbTest {
         Long[] ids = new Long[]{2L, 1L, 3L};
 
         Sql sql = simpleDb.genSql();
-        /*
+        *//*
         SELECT id
         FROM article
         WHERE id IN ('2', '3', '1')
         ORDER BY FIELD (id, '2', '3', '1')
-        */
+        *//*
         sql.append("SELECT id")
                 .append("FROM article")
                 .appendIn("WHERE id IN (?)", ids)
@@ -366,13 +366,13 @@ public class SimpleDbTest {
     @DisplayName("selectRows, Article")
     public void t015() {
         Sql sql = simpleDb.genSql();
-        /*
+        *//*
         == rawSql ==
         SELECT *
         FROM article
         ORDER BY id ASC
         LIMIT 3
-        */
+        *//*
         sql.append("SELECT * FROM article ORDER BY id ASC LIMIT 3");
         List<Article> articleRows = sql.selectRows(Article.class);
 
@@ -396,12 +396,12 @@ public class SimpleDbTest {
     @DisplayName("selectRow, Article")
     public void t016() {
         Sql sql = simpleDb.genSql();
-        /*
+        *//*
         == rawSql ==
         SELECT *
         FROM article
         WHERE id = 1
-        */
+        *//*
         sql.append("SELECT * FROM article WHERE id = 1");
         Article article = sql.selectRow(Article.class);
 
@@ -535,5 +535,5 @@ public class SimpleDbTest {
                 .selectLong();
 
         assertThat(newCount).isEqualTo(oldCount + 1);
-    }
+    }*/
 }

@@ -157,6 +157,7 @@ public class Sql {
 
     //혹시 결과가 한개가 아니여도 첫번째 row만 반환
     public Map<String, Object> selectRow() {
+        //실행된 쿼리의 결과 가져오기
         List<Map<String, Object>> rows = selectRows();
 
         if (rows.isEmpty()) {
@@ -167,6 +168,7 @@ public class Sql {
     }
 
     public LocalDateTime selectDatetime() {
+        //실행된 쿼리의 결과 가져오기
         Map<String, Object> row = selectRow();
 
         if (row.isEmpty()) {
@@ -177,7 +179,9 @@ public class Sql {
     }
 
     public Long selectLong() {
+        //실행된 쿼리의 결과 가져오기
         Map<String, Object> row = selectRow();
+
         if (row.isEmpty()) {
             return null;
         }
@@ -187,7 +191,9 @@ public class Sql {
     }
 
     public String selectString() {
+        //실행된 쿼리의 결과 가져오기
         Map<String, Object> row = selectRow();
+
         if (row.isEmpty()) {
             return null;
         }
@@ -197,12 +203,25 @@ public class Sql {
     }
 
     public Boolean selectBoolean() {
+        //실행된 쿼리의 결과 가져오기
         Map<String, Object> row = selectRow();
+
         if (row.isEmpty()) {
             return null;
         }
 
-        //Map에 들어있는 첫 번째 값(Value)을 꺼내서 반환
-        return (Boolean) row.values().iterator().next();
+        Object value = row.values().iterator().next();
+
+        //이미 값이 Boolean 타입일 때 그대로 반환
+        if(value instanceof Boolean){
+            return (Boolean) value;
+        }
+
+        //이미 값이 Number 타입일 때 그대로 반환
+        if (value instanceof Number) {
+            return ((Number) value).longValue() == 1;
+        }
+
+        return null;
     }
 }
