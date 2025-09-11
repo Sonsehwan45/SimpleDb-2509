@@ -1,6 +1,7 @@
 package com.back.domain.article.db;
 
 import java.sql.*;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -154,12 +155,24 @@ public class Sql {
         return rows;
     }
 
+    //혹시 결과가 한개가 아니여도 첫번째 row만 반환
     public Map<String, Object> selectRow() {
         List<Map<String, Object>> rows = selectRows();
 
         if (rows.isEmpty()) {
             return null;
         }
+        //첫번째 row만 반환
         return rows.getFirst();
+    }
+
+    public LocalDateTime selectDatetime() {
+        Map<String, Object> row = selectRow();
+
+        if (row.isEmpty()) {
+            return null;
+        }
+        //Map에 들어있는 첫 번째 값(Value)을 꺼내서 LocalDateTime으로 형변환 후 반환
+        return (LocalDateTime) row.values().iterator().next();
     }
 }
