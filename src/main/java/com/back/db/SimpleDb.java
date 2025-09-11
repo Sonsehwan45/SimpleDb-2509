@@ -1,5 +1,8 @@
 package com.back.db;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -13,16 +16,16 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.LoggerFactory;
 
+@Slf4j
 public class SimpleDb {
 
     private final String host;
     private final String userName;
     private final String password;
     private final String database;
-    @Setter
-    private boolean devMode;
 
     private static final int PORT = 3306;
 
@@ -33,22 +36,26 @@ public class SimpleDb {
         this.database = database;
     }
 
-    // TODO : 커넥션 풀을 구현하여 커넥션 획득
+    // TODO : 커넥션 풀을 구현하여 thread-safe 커넥션 획득
     private Connection getConnection() throws SQLException {
         String URL = "jdbc:mysql://" + host + ":" + PORT + "/" + database;
         return DriverManager.getConnection(URL, userName, password);
     }
 
     // throws SQLException을 명시하기 위한 Function<PreparedStatement, T> 함수형 인터페이스
+    // 바인딩 완료된 PreparedStatement 이용해, 쿼리를 실행하고 적절한 결과값을 반환하도록 구현한다
     @FunctionalInterface
     interface StatementCallback<T> {
         T apply(PreparedStatement statement) throws SQLException;
     }
 
     private <T> T runTemplate(String sql, Object[] args, StatementCallback<T> callback) {
-        System.out.println(sql);
-        System.out.print("====\n");
+        // devMode일 경우, trace 레벨도 출력
+        log.info("Executing SQL: {}", sql.trim());
+        log.trace("Args {}", Arrays.toString(args));
+        log.info("=======================================");
 
+        // try - with resources (JAVA 7 이상)
         try (Connection connection = getConnection();
              PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
@@ -62,22 +69,22 @@ public class SimpleDb {
             return callback.apply(statement);
 
         } catch (SQLException e) {
+            log.error(e.getMessage(), e);
             throw new RuntimeException(e);
         }
     }
 
     // 바인딩할 값이 없는 경우
-    private <T> T runTemplate(String sql, StatementCallback<T> callback) {
+    private <T> T runTemplate(String sql, SimpleDb.StatementCallback<T> callback) {
         return runTemplate(sql, null, callback);
     }
 
     public void run(String sql, Object... args) {
-        System.out.println(sql);
-        runTemplate(sql, args, statement -> statement.executeUpdate());
+        runTemplate(sql, args, PreparedStatement::executeUpdate);
     }
 
     public void run(String sql) {
-        runTemplate(sql, statement -> statement.executeUpdate());
+        runTemplate(sql, PreparedStatement::executeUpdate);
     }
 
     private long runInsert(String sql, Object... args) {
@@ -93,24 +100,24 @@ public class SimpleDb {
     }
 
     private int runUpdate(String sql, Object... args) {
-        return runTemplate(sql, args, statement -> statement.executeUpdate());
+        return runTemplate(sql, args, PreparedStatement::executeUpdate);
     }
 
     private int runDelete(String sql, Object... args) {
-        return runTemplate(sql, args, statement -> statement.executeUpdate());
+        return runTemplate(sql, args, PreparedStatement::executeUpdate);
     }
 
-    private Map<String, Object> convertRowToMap(String sql, Object... args) {
+    private Map<String, Object> queryRowToMap(String sql, Object... args) {
         return runTemplate(sql, args, statement -> {
             ResultSet rs = statement.executeQuery();
             if (rs.next()) {
-                return queryRowToMap(rs);
+                return convertRowToMap(rs);
             }
             return new HashMap<>();
         });
     }
 
-    private Map<String, Object> queryRowToMap(ResultSet rs) throws SQLException {
+    private Map<String, Object> convertRowToMap(ResultSet rs) throws SQLException {
         Map<String, Object> row = new HashMap<>();
         ResultSetMetaData metaData = rs.getMetaData();
         int columnCount = metaData.getColumnCount();
@@ -125,7 +132,7 @@ public class SimpleDb {
             ResultSet rs = statement.executeQuery();
             List<Map<String, Object>> rows = new ArrayList<>();
             while (rs.next()) {
-                rows.add(queryRowToMap(rs));
+                rows.add(convertRowToMap(rs));
             }
             return rows;
         });
@@ -166,6 +173,18 @@ public class SimpleDb {
 
     }
 
+    // devMode true 설정시 log레벨 변경
+    public void setDevMode(boolean devMode) {
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        Logger logger = loggerContext.getLogger(SimpleDb.class);
+        if (devMode) {
+            logger.setLevel(Level.TRACE);
+        } else {
+            // default
+            logger.setLevel(Level.INFO);
+        }
+    }
+
     public Sql genSql() {
         return new Sql();
     }
@@ -203,7 +222,7 @@ public class SimpleDb {
         }
 
         public Map<String, Object> selectRow() {
-            return SimpleDb.this.convertRowToMap(builder.toString(), bindingArgs.toArray());
+            return SimpleDb.this.queryRowToMap(builder.toString(), bindingArgs.toArray());
         }
 
         public List<Map<String, Object>> selectRows() {
