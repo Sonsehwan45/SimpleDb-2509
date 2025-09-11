@@ -28,8 +28,12 @@ public class SimpleDb {
 
     // 단순 SQL 실행 (DDL, DML)
     public void run(String sql, Object... params) {
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+
+        try {
+            conn = getConnection();
+            pstmt = conn.prepareStatement(sql);
 
             for (int i = 0; i < params.length; i++) {
                 pstmt.setObject(i + 1, params[i]);
@@ -42,6 +46,17 @@ public class SimpleDb {
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
+        } finally {
+            if (pstmt != null) {
+                try {
+                    pstmt.close();
+                } catch (SQLException ignored) {}
+            }
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException ignored) {}
+            }
         }
     }
 
