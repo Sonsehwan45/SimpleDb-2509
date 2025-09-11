@@ -44,59 +44,42 @@ public class Sql {
         return db.selectRow(querySb.toString(), args.toArray());
     }
 
-    public LocalDateTime selectDatetime() {
+    private <T> T selectColumn(Class<T> type) {
         Map<String, Object> row = db.selectRow(querySb.toString(), args.toArray());
-        if(row == null) {
-            return null;
-        }
-        for(Object value : row.values()) {
-            System.out.println(value.getClass().getName());
-            if(value instanceof LocalDateTime) {
-                return (LocalDateTime) value;
+        if(row == null || row.isEmpty()) return null;
+
+        /**
+         * AI 추천
+         * 처음에 for문을 구현하고 처음에 발견한 거에서 바로 retun 하는 식으로 구현함
+         * 그러나 어차피 처음 값만 가져올 건데 for문을 구현하는게 비효율적이라고 생각했음
+         */
+        Object value = row.values().iterator().next();
+        if(type == Boolean.class) {
+            if(value instanceof Long) {
+                return (T) Boolean.valueOf(((Long) value).longValue() != 0);
             }
         }
+
+        if(type.isInstance(value)) {
+            return (T) value;
+        }
+
         return null;
+    }
+
+    public LocalDateTime selectDatetime() {
+        return selectColumn(LocalDateTime.class);
     }
 
     public Long selectLong() {
-        Map<String, Object> row = db.selectRow(querySb.toString(), args.toArray());
-        if(row == null) {
-            return null;
-        }
-        for(Object value : row.values()) {
-            System.out.println(value.getClass().getName());
-            if(value instanceof Long) {
-                return (Long) value;
-            }
-        }
-        return null;
+        return selectColumn(Long.class);
     }
 
     public String selectString() {
-        Map<String, Object> row = db.selectRow(querySb.toString(), args.toArray());
-        if(row == null) {
-            return null;
-        }
-        for(Object value : row.values()) {
-            System.out.println(value.getClass().getName());
-            if(value instanceof String) {
-                return (String) value;
-            }
-        }
-        return null;
+        return selectColumn(String.class);
     }
 
     public Boolean selectBoolean() {
-        Map<String, Object> row = db.selectRow(querySb.toString(), args.toArray());
-        if(row == null) {
-            return null;
-        }
-        for(Object value : row.values()) {
-            System.out.println(value.getClass().getName());
-            if(value instanceof Boolean) {
-                return (Boolean) value;
-            }
-        }
-        return null;
+        return selectColumn(Boolean.class);
     }
 }

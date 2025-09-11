@@ -9,16 +9,16 @@ import java.util.*;
 public class SimpleDb {
 
     private boolean devMode;
-    Connection conn;
+    private Connection conn;
 
     public SimpleDb(String host, String user, String passwd, String dbName) {
         String url = "jdbc:mysql://" + host + "/" + dbName + "?useSSL=false&serverTimezone=Asia/Seoul";
-        connectDb(url);
+        connectDb(url, user, passwd);
     }
 
-    private void connectDb(String url) {
+    private void connectDb(String url, String user, String passwd) {
         try {
-            this.conn = DriverManager.getConnection(url);
+            this.conn = DriverManager.getConnection(url, user, passwd);
             System.out.println("DB 연결 성공");
         } catch (SQLException e) {
             throw new RuntimeException(e);
