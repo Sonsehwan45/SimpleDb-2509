@@ -128,8 +128,60 @@ Map<String, Object> row = simpleDb.genSql()
     .selectRow();
 ```
 ---
+## 5. insert() 동작 과정 예시
 
-## 5. 트러블 슈팅
+### 예시 코드
+```java
+Sql sql = simpleDb.genSql()
+.append("INSERT INTO post (subject, body) VALUES (?, ?)", "제목1", "내용1");
+
+long newId = sql.insert();
+```
+
+### 실행 과정
+
+1. **SQL 조립**  
+   `append()` 호출 시 SQL 문자열과 파라미터가 내부에 저장됩니다.  
+   ```java
+   sqlBuilder = "INSERT INTO post (subject, body) VALUES (?, ?)"
+   params = ["제목1", "내용1"]
+   ```
+
+2. **DB 연결 생성**  
+   `simpleDb.getConnection()` 호출을 통해 MySQL과 연결합니다.
+
+3. **PreparedStatement 준비**  
+   `conn.prepareStatement(..., Statement.RETURN_GENERATED_KEYS)` 로 준비합니다.  
+   실행될 SQL:
+   ```sql
+   INSERT INTO post (subject, body) VALUES (?, ?)
+   ```
+
+4. **파라미터 바인딩**
+    - `params[0] = "제목1"` → 첫 번째 `?`
+    - `params[1] = "내용1"` → 두 번째 `?`  
+      최종 실행 SQL:
+      ```sql
+      INSERT INTO post (subject, body) VALUES ('제목1', '내용1');
+      ```
+
+5. **쿼리 실행**  
+   `pstmt.executeUpdate()` 실행으로 DB에 새로운 레코드가 삽입됩니다.
+
+6. **생성된 키 가져오기**  
+   `pstmt.getGeneratedKeys()` 호출로 자동 증가된 PK(id)를 조회합니다.  
+   예: 새 레코드 id가 `5`라면, `insert()`는 `5`를 반환합니다.
+
+7. **자원 해제**  
+   `ResultSet`, `PreparedStatement`, `Connection`을 `finally` 블록에서 닫습니다.
+
+### 정리
+- `insert()`는 SQL 실행 후 **자동 증가된 기본키(PK)**를 반환합니다.
+- 따라서 새로 추가된 행의 id 값을 추적할 수 있습니다.
+
+---
+
+## 6. 트러블 슈팅
 ### 1) build.gradle.kts 관련 문제
 
 자료에 주어진 코드를 그대로 쓰려 했으나 문제 발생
@@ -142,4 +194,4 @@ testImplementation("org.springframework.boot:spring-boot-starter-test")
 ```
 ---
 
-## 6. 느낀점
+## 7. 느낀점
