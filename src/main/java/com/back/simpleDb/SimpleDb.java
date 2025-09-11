@@ -12,14 +12,24 @@ public class SimpleDb {
     Connection conn;
 
     public SimpleDb(String host, String user, String passwd, String dbName) {
+        String url = "jdbc:mysql://" + host + "/" + dbName + "?useSSL=false&serverTimezone=Asia/Seoul";
+        connectDb(url);
+    }
+
+    private void logSql(String sql, Object... args) {
+        System.out.println("==============================================");
+        System.out.println("sql " + sql);
+        System.out.println("args " + Arrays.toString(args));
+    }
+
+    public void connectDb(String url) {
         try {
-            String url = "jdbc:mysql://" + host + "/" + dbName + "?useSSL=false&serverTimezone=Asia/Seoul";
-            this.conn = DriverManager.getConnection(url, user, passwd);
+            this.conn = DriverManager.getConnection(url);
             System.out.println("DB 연결 성공");
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-     }
+    }
 
     public void run(String sql, Object... args) {
         try (PreparedStatement pstmt = conn.prepareStatement(sql)){
@@ -30,8 +40,7 @@ public class SimpleDb {
 
             int rs = pstmt.executeUpdate();
 
-            System.out.println("[sql] " + sql);
-            System.out.println("[args]" + Arrays.toString(args));
+            logSql(sql, args);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -56,8 +65,7 @@ public class SimpleDb {
                 newId = rs.getLong(1);
             }
 
-            System.out.println("[sql] " + sql);
-            System.out.println("[args]" + Arrays.toString(args));
+            logSql(sql, args);
 
             return newId;
         } catch (SQLException e) {
@@ -74,8 +82,7 @@ public class SimpleDb {
 
             int affectedRows = pstmt.executeUpdate(); //영향 받은 행의 수
 
-            System.out.println("[sql] " + sql);
-            System.out.println("[args]" + Arrays.toString(args));
+            logSql(sql, args);
 
             return affectedRows;
         } catch (SQLException e) {
@@ -92,8 +99,7 @@ public class SimpleDb {
 
             ResultSet rs = pstmt.executeQuery();
 
-            System.out.println("[sql] " + sql);
-            System.out.println("[args]" + Arrays.toString(args));
+            logSql(sql, args);
 
             List<Map<String, Object>> rows = new ArrayList<>();
             ResultSetMetaData metaData = rs.getMetaData();
@@ -124,8 +130,7 @@ public class SimpleDb {
 
             ResultSet rs = pstmt.executeQuery();
 
-            System.out.println("[sql] " + sql);
-            System.out.println("[args]" + Arrays.toString(args));
+            logSql(sql, args);
 
             if(!rs.next()) {
                 return null;
