@@ -100,17 +100,17 @@ public class SimpleDb {
         return runTemplate(sql, args, statement -> statement.executeUpdate());
     }
 
-    private Map<String, Object> getQueryResultToMap(String sql, Object... args) {
+    private Map<String, Object> convertRowToMap(String sql, Object... args) {
         return runTemplate(sql, args, statement -> {
             ResultSet rs = statement.executeQuery();
             if (rs.next()) {
-                return getRowToMap(rs);
+                return queryRowToMap(rs);
             }
             return new HashMap<>();
         });
     }
 
-    private Map<String, Object> getRowToMap(ResultSet rs) throws SQLException {
+    private Map<String, Object> queryRowToMap(ResultSet rs) throws SQLException {
         Map<String, Object> row = new HashMap<>();
         ResultSetMetaData metaData = rs.getMetaData();
         int columnCount = metaData.getColumnCount();
@@ -120,14 +120,24 @@ public class SimpleDb {
         return row;
     }
 
-    private List<Map<String, Object>> getQueryResultToMaps(String sql, Object... args) {
+    private List<Map<String, Object>> queryRowsToMaps(String sql, Object... args) {
         return runTemplate(sql, args, statement -> {
             ResultSet rs = statement.executeQuery();
             List<Map<String, Object>> rows = new ArrayList<>();
             while (rs.next()) {
-                rows.add(getRowToMap(rs));
+                rows.add(queryRowToMap(rs));
             }
             return rows;
+        });
+    }
+
+    private <T> T queryColumn(String sql, Object... args) {
+        return runTemplate(sql, args, statement -> {
+            ResultSet rs = statement.executeQuery();
+            if (rs.next()) {
+                return (T) rs.getObject(1);
+            }
+            return null;
         });
     }
 
@@ -183,11 +193,11 @@ public class SimpleDb {
         }
 
         public Map<String, Object> selectRow() {
-            return SimpleDb.this.getQueryResultToMap(builder.toString(), bindingArgs.toArray());
+            return SimpleDb.this.convertRowToMap(builder.toString(), bindingArgs.toArray());
         }
 
         public List<Map<String, Object>> selectRows() {
-            return SimpleDb.this.getQueryResultToMaps(builder.toString(), bindingArgs.toArray());
+            return SimpleDb.this.queryRowsToMaps(builder.toString(), bindingArgs.toArray());
         }
 
         public <T> List<T> selectRows(Class<T> clazz) {
@@ -199,23 +209,23 @@ public class SimpleDb {
         }
 
         public LocalDateTime selectDatetime() {
-            return null;
+            return SimpleDb.this.queryColumn(builder.toString(), bindingArgs.toArray());
         }
 
         public Long selectLong() {
-            return null;
+            return SimpleDb.this.queryColumn(builder.toString(), bindingArgs.toArray());
         }
 
         public String selectString() {
-            return null;
+            return SimpleDb.this.queryColumn(builder.toString(), bindingArgs.toArray());
         }
 
         public Boolean selectBoolean() {
-            return null;
+            return SimpleDb.this.queryColumn(builder.toString(), bindingArgs.toArray());
         }
 
         public List<Long> selectLongs() {
-            return null;
+            return SimpleDb.this.queryColumn(builder.toString(), bindingArgs.toArray());
         }
     }
 }
