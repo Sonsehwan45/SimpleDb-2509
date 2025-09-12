@@ -25,6 +25,18 @@ public class SimpleDb {
         }
     }
 
+    public void close() {
+        if(conn != null) {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            } finally {
+                conn = null;
+            }
+        }
+    }
+
     private void logSql(String sql, Object... args) {
         if(!devMode) { return; }
         System.out.println("========== SQL ==========");
