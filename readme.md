@@ -739,6 +739,216 @@ public class Sql {
     - JDBC Connection 관리
     - PreparedStatement 생성, 파라미터 바인딩, ResultSet 처리
 
+---
 
-  	
+# 9/12 리팩토링
+
+## 리팩토링 이유 및 구조 정리
+
+### 기존 코드 문제점
+1. 책임 분리 불명확
+   - `SimpleDb`에서 ResultSet 처리만 담당하고 싶었는데, `selectRow`는 단순히 List에서 첫번째 값만 가녀오는 역할
+   - `Sql`과 `SimpleDb`간 역할 구분이 명확하지 않아짐
+
+2. 중복된 쿼리 실행 로직
+  - insert/updateOrDelete,selectRows 모두 `PreparedStatement`를 만들어 실행
+  - 그러나 반복되는 로직을 함수로 묶지 않고 그대로 작성 
+  - 이런 일로, 구조가 일관되지 않음
+
+3. `run` 메서드 활용 부족
+   - 초기 설계에서 `run`을 기반으로 모든 SQL 실행을 통일하려고 했음
+   - 하지만 구현 우선순위에서 밀리면서 실제 코드에서 제대로 활용하지 못함
+   
+## 리팩토링 목표
+- SQL 실행 공통 로직 통합 -> `SimpleDb.run()`활용
+- 책임 명확화
+  - `SimpleDb` : SQL 실행과 결과(ResultSet) 처리
+  - `SQL` : SQL 빌드 및 호출, 결과(ResultSet X) 가공
+
+## 리팩토링 후 구조
+### SimpleDb
+
+| 기능               | 의존         |
+| ---------------- | ---------- |
+| `insert`         | `run()` 활용 |
+| `updateOrDelete` | `run()` 활용 |
+| `select`         | `run()` 활용 |
+
+### Sql
+| 기능                                                                   | 의존                          |
+| -------------------------------------------------------------------- | --------------------------- |
+| `insert()`                                                           | `SimpleDb.insert()`         |
+| `update()`                                                           | `SimpleDb.updateOrDelete()` |
+| `delete()`                                                           | `SimpleDb.updateOrDelete()` |
+| `selectRows()`                                                       | `SimpleDb.select()`         |
+| `selectRow()`                                                        | `SimpleDb.select()`         |
+| `selectLong() / selectString() / selectDatetime() / selectBoolean()` | `selectRow()`               |
+
+## 리팩토링 코드
+
+
+<details>
+<summary>Sql 구현 코드</summary>
+
+```java
+@Setter
+public class SimpleDb {
+
+  //...생략
   
+  //SQL 실행 방식 정의 (함수형 인터페이스)
+  @FunctionalInterface
+  private interface SqlExecutor<T> {
+    T execute(PreparedStatement pstmt) throws SQLException;
+  }
+
+  //공통 SQL 실행 메서드 (제너릭)
+  private <T> T run(String sql, SqlExecutor<T> executor, Object... args) {
+    try(PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
+      setArgs(pstmt, args);
+
+      T result = executor.execute(pstmt);
+
+      logSql(sql, args);
+
+      return result;
+    } catch(SQLException e) {
+      logErr(e, sql, args);
+      throw new RuntimeException(e);
+    }
+  }
+
+  //DML 전용 run 메서드 (오버로딩)
+  public void run(String sql, Object... args) {
+    run(sql, PreparedStatement::executeUpdate, args);
+  }
+
+
+  public Sql genSql() {
+    return new Sql(this);
+  }
+
+  public long insert(String sql, Object... args) {
+    return run(sql, pstmt -> {
+      pstmt.executeUpdate();
+      try(ResultSet rs = pstmt.getGeneratedKeys()) {
+        return rs.next() ? rs.getLong(1) : null;
+      }
+    }, args);
+  }
+
+  public int updateOrDelete(String sql, Object... args) {
+    return run(sql, PreparedStatement::executeUpdate, args);
+  }
+
+  public List<Map<String, Object>> select(String sql, Object... args) {
+    return run(sql, pstmt -> {
+      try(ResultSet rs = pstmt.executeQuery()) {
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+
+        ResultSetMetaData metaData = rs.getMetaData();
+        int columnCount = metaData.getColumnCount();
+
+        while(rs.next()) {
+          Map<String, Object> row = new HashMap<>();
+          for(int i=1; i<=columnCount; i++) {
+            row.put(metaData.getColumnName(i), rs.getObject(i));
+          }
+          rows.add(row);
+        }
+        return rows;
+      }
+    }, args);
+  }
+}
+
+```
+</details>
+
+### 1. 함수형 인터페이스 
+```java
+  @FunctionalInterface
+  private interface SqlExecutor<T> {
+    T execute(PreparedStatement pstmt) throws SQLException;
+  }
+```
+- SQL 실행 방법 정의
+  - insert/delete/update : executeUpdate
+  - select : executeQuery
+  - 이렇게 구문에 따라 실행 방법이 다르므로 함수형 인터페이스를 도입해,   
+    PreparedStatement를 원하는 방식으로 실행하고 결과(T)를 반환하도록 함
+
+### 2. run 제너릭 메서드
+```java
+  private <T> T run(String sql, SqlExecutor<T> executor, Object... args) {
+    try(PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
+      setArgs(pstmt, args);
+
+      T result = executor.execute(pstmt);
+
+      logSql(sql, args);
+
+      return result;
+    } catch(SQLException e) {
+      logErr(e, sql, args);
+      throw new RuntimeException(e);
+    }
+  }
+```
+- SQL 공통 로직 처리
+  - PreparedStatement 생성, 파라미터 바인딩, SQL 실행, 로그 출력, 예외 처리 담당
+  - `SqlExecuter<T>`를 통해 insert/update/delete/select 등 실행 방식과 반환 타입(T)를 유연하게 지정 가능
+  - 제너릭 타입(T) 사용으로 다양한 반환값을 한 메서드에서 처리
+
+### 3. run 오버로딩
+```java
+  public void run(String sql, Object... args) {
+    run(sql, PreparedStatement::executeUpdate, args);
+  }
+```
+- 단순 SQL 실행용 편의 메서드
+  - 테스트코드에서는 DB 초기 세팅을 위해 사용됨
+  - 오버로딩을 이용하여 구현
+
+### 4. insert/updateOrDelete/select
+```java
+  public List<Map<String, Object>> select(String sql, Object... args) {
+    return run(sql, pstmt -> {
+      try(ResultSet rs = pstmt.executeQuery()) {
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+
+        ResultSetMetaData metaData = rs.getMetaData();
+        int columnCount = metaData.getColumnCount();
+
+        while(rs.next()) {
+          Map<String, Object> row = new HashMap<>();
+          for(int i=1; i<=columnCount; i++) {
+            row.put(metaData.getColumnName(i), rs.getObject(i));
+          }
+          rows.add(row);
+        }
+        return rows;
+      }
+    }, args);
+  }
+```
+- SQL 실행 + 결과 처리
+  - RreparedStatment를 통해 SQL을 실행하고, 실행 결과를 호출자가 원하는 형태로 가공하여 반환
+
+
+## 고려했던 사항
+### 1. 추상화로 인한 메서드 호출 문제
+**고민**
+- `Sql`에서 `selectLong`과 같은 메서드를 호출하면, 내부적으로 SimpleDb의 `select` -> `run` 메서드를 거쳐 PreparedStatement가 실행됨
+- 추상화 때문에 메서드 호출이 여러 단계로 이어지는 구조라 성능 상 괜찮을까?
+- 또, 추후 멀티 스레드 환경에서 SimpleDb 객체를 공유할 경우, 안정성에 문제가 생기진 않을까 고민함
+
+**결론**
+- 이러한 고민은 성능과 멀티 스레드에 대한 학습이 부족해 생겨나는 것으로 판단됨
+- AI에 따르면, 
+  - 추상화 계층 때문에 호출 단계가 늘어나는 것 자체는 성능 문제로 보지 않는다
+  - 스레드별 Connection을 따로 제공하면 안전하다

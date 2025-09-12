@@ -37,15 +37,19 @@ public class Sql {
     }
 
     public List<Map<String, Object>> selectRows() {
-        return db.selectRows(querySb.toString(), args.toArray());
+        return db.select(querySb.toString(), args.toArray());
     }
 
     public Map<String, Object> selectRow() {
-        return db.selectRow(querySb.toString(), args.toArray());
+        List<Map<String, Object>> rows = db.select(querySb.toString(), args.toArray());
+        if (rows == null || rows.isEmpty()) {
+            return null;
+        }
+        return rows.getFirst();
     }
 
     private <T> T selectColumn(Class<T> type) {
-        Map<String, Object> row = db.selectRow(querySb.toString(), args.toArray());
+        Map<String, Object> row = selectRow();
         if(row == null || row.isEmpty()) return null;
 
         /**

@@ -59,98 +59,67 @@ public class SimpleDb {
         }
     }
 
-    public void run(String sql, Object... args) {
-        try (PreparedStatement pstmt = conn.prepareStatement(sql)){
+    @FunctionalInterface
+    private interface SqlExecutor<T> {
+        T execute(PreparedStatement pstmt) throws SQLException;
+    }
+
+    private <T> T run(String sql, SqlExecutor<T> executor, Object... args) {
+        try(PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
             setArgs(pstmt, args);
 
-            pstmt.executeUpdate();
+            T result = executor.execute(pstmt);
 
             logSql(sql, args);
-        } catch (SQLException e) {
+
+            return result;
+        } catch(SQLException e) {
             logErr(e, sql, args);
             throw new RuntimeException(e);
         }
     }
+
+    public void run(String sql, Object... args) {
+        run(sql, PreparedStatement::executeUpdate, args);
+    }
+
 
     public Sql genSql() {
         return new Sql(this);
     }
 
     public long insert(String sql, Object... args) {
-        try (PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-
-            setArgs(pstmt, args);
-
+        return run(sql, pstmt -> {
             pstmt.executeUpdate();
-            ResultSet rs = pstmt.getGeneratedKeys();
-
-            long newId = 0;
-            if(rs.next()) {
-                newId = rs.getLong(1);
+            try(ResultSet rs = pstmt.getGeneratedKeys()) {
+                return rs.next() ? rs.getLong(1) : null;
             }
-
-            logSql(sql, args);
-
-            return newId;
-        } catch (SQLException e) {
-            logErr(e, sql, args);
-            throw new RuntimeException(e);
-        }
+        }, args);
     }
 
     public int updateOrDelete(String sql, Object... args) {
-        try (PreparedStatement pstmt = conn.prepareStatement(sql)){
-
-            setArgs(pstmt, args);
-
-            int affectedRows = pstmt.executeUpdate(); //영향 받은 행의 수
-
-            logSql(sql, args);
-
-            return affectedRows;
-        } catch (SQLException e) {
-            logErr(e, sql, args);
-            throw new RuntimeException(e);
-        }
+        return run(sql, PreparedStatement::executeUpdate, args);
     }
 
-    public List<Map<String, Object>> selectRows(String sql, Object... args) {
-        try (PreparedStatement pstmt = conn.prepareStatement(sql)){
-
-            setArgs(pstmt, args);
-
+    public List<Map<String, Object>> select(String sql, Object... args) {
+        return run(sql, pstmt -> {
             try(ResultSet rs = pstmt.executeQuery()) {
-                logSql(sql, args);
 
                 List<Map<String, Object>> rows = new ArrayList<>();
 
                 ResultSetMetaData metaData = rs.getMetaData();
                 int columnCount = metaData.getColumnCount();
 
-                while (rs.next()) {
+                while(rs.next()) {
                     Map<String, Object> row = new HashMap<>();
-                    for (int i = 1; i <= columnCount; i++) {
-                        String columnName = metaData.getColumnName(i);
-                        Object value = rs.getObject(i);
-                        row.put(columnName, value);
+                    for(int i=1; i<=columnCount; i++) {
+                        row.put(metaData.getColumnName(i), rs.getObject(i));
                     }
                     rows.add(row);
                 }
-
                 return rows;
             }
-        } catch (SQLException e) {
-            logErr(e, sql, args);
-            throw new RuntimeException(e);
-        }
-    }
-
-    public Map<String, Object> selectRow(String sql, Object... args) {
-        List<Map<String,Object>> rows = selectRows(sql, args);
-        if (rows == null || rows.isEmpty()) {
-            return null;
-        }
-        return rows.getFirst();
+        }, args);
     }
 }

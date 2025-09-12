@@ -290,27 +290,27 @@ public class SimpleDbTest {
 
         assertThat(isBlind).isEqualTo(false);
     }
-//
-//    @Test
-//    @DisplayName("select, LIKE 사용법")
-//    public void t012() {
-//        Sql sql = simpleDb.genSql();
-//        /*
-//        == rawSql ==
-//        SELECT COUNT(*)
-//        FROM article
-//        WHERE id BETWEEN '1' AND '3'
-//        AND title LIKE CONCAT('%', '제목' '%')
-//        */
-//        sql.append("SELECT COUNT(*)")
-//                .append("FROM article")
-//                .append("WHERE id BETWEEN ? AND ?", 1, 3)
-//                .append("AND title LIKE CONCAT('%', ? '%')", "제목");
-//
-//        long count = sql.selectLong();
-//
-//        assertThat(count).isEqualTo(3);
-//    }
+
+    @Test
+    @DisplayName("select, LIKE 사용법")
+    public void t012() {
+        Sql sql = simpleDb.genSql();
+        /*
+        == rawSql ==
+        SELECT COUNT(*)
+        FROM article
+        WHERE id BETWEEN '1' AND '3'
+        AND title LIKE CONCAT('%', '제목' '%')
+        */
+        sql.append("SELECT COUNT(*)")
+                .append("FROM article")
+                .append("WHERE id BETWEEN ? AND ?", 1, 3)
+                .append("AND title LIKE CONCAT('%', ? '%')", "제목");
+
+        long count = sql.selectLong();
+
+        assertThat(count).isEqualTo(3);
+    }
 //
 //    @Test
 //    @DisplayName("appendIn")
