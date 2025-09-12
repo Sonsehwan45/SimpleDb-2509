@@ -6,6 +6,8 @@ import java.sql.*;
  * DB 연결 및 SQL 실행을 담당하는 클래스
  *
  * 👉 DB 연결(Connection) 생성, 단순 SQL 실행, Sql 빌더 객체 제공 기능을 지원합니다.
+ *
+ * 멀티스레드 환경(WebMVC 등)에서 각 스레드가 독립적인 Connection을 사용하도록 ThreadLocal 적용
  */
 public class SimpleDb {
     private final String host;
@@ -13,6 +15,9 @@ public class SimpleDb {
     private final String password;
     private final String dbName;
     private boolean devMode = false;
+
+    // 각 스레드별로 독립적인 Connection을 저장
+    private final ThreadLocal<Connection> threadConnection = new ThreadLocal<>();
 
     public SimpleDb(String host, String user, String password, String dbName) {
         this.host = host;
@@ -31,14 +36,40 @@ public class SimpleDb {
     }
 
     /**
-     * DB 연결 생성
+     * 멀티스레드 환경 안전하게 DB Connection 반환
      *
-     * @return Connection 객체
+     * - 각 스레드는 독립적인 Connection 객체를 사용
+     * - 이미 열려 있는 경우 기존 Connection 반환
+     * - 스레드 종료 시 simpleDb.closeThreadConnection() 호출로 정리 필요
+     *
+     * @return 현재 스레드 전용 Connection 객체
      * @throws SQLException DB 연결 실패 시 예외 발생
      */
     public Connection getConnection() throws SQLException {
-        String url = "jdbc:mysql://" + host + ":3306/" + dbName + "?serverTimezone=Asia/Seoul";
-        return DriverManager.getConnection(url, user, password);
+        Connection conn = threadConnection.get();
+        if (conn == null || conn.isClosed()) {
+            String url = "jdbc:mysql://" + host + ":3306/" + dbName + "?serverTimezone=Asia/Seoul";
+            conn = DriverManager.getConnection(url, user, password);
+            threadConnection.set(conn);
+        }
+        return conn;
+    }
+
+    /**
+     * 현재 스레드의 Connection 종료 및 ThreadLocal 제거
+     *
+     * - 반드시 스레드 종료 전에 호출해야 메모리 누수 방지
+     */
+    public void closeThreadConnection() {
+        Connection conn = threadConnection.get();
+        if (conn != null) {
+            try {
+                if (!conn.isClosed()) {
+                    conn.close();
+                }
+            } catch (SQLException ignored) {}
+            threadConnection.remove();
+        }
     }
 
     /**
@@ -50,11 +81,9 @@ public class SimpleDb {
      * @param params PreparedStatement 파라미터
      */
     public void run(String sql, Object... params) {
-        Connection conn = null;
         PreparedStatement pstmt = null;
-
         try {
-            conn = getConnection();
+            Connection conn = getConnection(); // ThreadLocal 전용 Connection 사용
             pstmt = conn.prepareStatement(sql);
 
             for (int i = 0; i < params.length; i++) {
@@ -69,16 +98,8 @@ public class SimpleDb {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         } finally {
-            if (pstmt != null) {
-                try {
-                    pstmt.close();
-                } catch (SQLException ignored) {}
-            }
-            if (conn != null) {
-                try {
-                    conn.close();
-                } catch (SQLException ignored) {}
-            }
+            // PreparedStatement만 닫고 Connection은 ThreadLocal에서 관리
+            if (pstmt != null) try { pstmt.close(); } catch (SQLException ignored) {}
         }
     }
 
