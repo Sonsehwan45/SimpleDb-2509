@@ -205,6 +205,14 @@ public class SimpleDb {
             return this;
         }
 
+        // 가변인자에 아무 것도 전달되지 않아도 String sql만 전달 된다면 append는 컴파일 에러 발생하지않고 잘 작동 한다
+        // 하지만, 이 메소드가 따로 선언 되는 것이 더 나은 사용자 경험이라고 생각하여 추가하였다
+        // 이는 SimpleDb.run()도 마찬가지이다
+        public Sql append(String sql) {
+            builder.append(sql).append(" ");
+            return this;
+        }
+
         public Sql appendIn(String sql, Object... args) {
             return null;
         }
