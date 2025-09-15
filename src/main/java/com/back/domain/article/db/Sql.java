@@ -55,10 +55,12 @@ public class Sql {
      */
     public long insert() {
         logSql(); // SQL 로그 출력
-        // try-with-resources: conn과 pstmt를 자동으로 close
-        try (Connection conn = DriverManager.getConnection(simpleDb.url, simpleDb.user, simpleDb.password);
-             // RETURN_GENERATED_KEYS 옵션으로 PreparedStatement 생성
-             PreparedStatement pstmt = conn.prepareStatement(rawSql.toString().trim(), Statement.RETURN_GENERATED_KEYS)) {
+
+        // simpleDb에서 현재 스레드의 Connection을 받아옴
+        Connection conn = simpleDb.getConnection();
+
+        // Connection은 자동으로 닫지 않고, PreparedStatement만 자동으로 닫도록 try-with-resources 사용
+        try (PreparedStatement pstmt = conn.prepareStatement(rawSql.toString().trim(), Statement.RETURN_GENERATED_KEYS)) {
 
             bindParams(pstmt); // 파라미터 바인딩
 
@@ -88,9 +90,10 @@ public class Sql {
      */
     public int update() {
         logSql();
-        // try-with-resources 구문으로 Connection과 PreparedStatement 자원을 자동 해제
-        try (Connection conn = DriverManager.getConnection(simpleDb.url, simpleDb.user, simpleDb.password);
-             PreparedStatement pstmt = conn.prepareStatement(rawSql.toString().trim())) {
+
+        Connection conn = simpleDb.getConnection();
+
+        try (PreparedStatement pstmt = conn.prepareStatement(rawSql.toString().trim())) {
 
             bindParams(pstmt);
 
@@ -112,46 +115,41 @@ public class Sql {
 
         List<Map<String, Object>> rows = new ArrayList<>();
 
+        Connection conn = simpleDb.getConnection();
+
         // Connection, PreparedStatement, ResultSet 모두 try-with-resources로 자원 관리
-        try (Connection conn = DriverManager.getConnection(simpleDb.url, simpleDb.user, simpleDb.password);
-             PreparedStatement pstmt = conn.prepareStatement(rawSql.toString().trim());
-             ResultSet rs = pstmt.executeQuery()) {
+        try (PreparedStatement pstmt = conn.prepareStatement(rawSql.toString().trim());) {
 
             bindParams(pstmt);
 
-            // ResultSet의 메타데이터(컬럼 정보)를 루프 시작 전에 한 번만 가져옴
-            ResultSetMetaData metaData = rs.getMetaData();
-            int columnCount = metaData.getColumnCount();
+            try (ResultSet rs = pstmt.executeQuery()) {
+                ResultSetMetaData metaData = rs.getMetaData();
 
-            // while 루프를 돌며 각 row를 처리
-            while (rs.next()) {
-                Map<String, Object> row = new HashMap<>();
+                int columnCount = metaData.getColumnCount();
 
-                // for 루프를 돌며 현재 row의 모든 컬럼을 Map에 담음
-                for (int i = 1; i <= columnCount; i++) {
-                    // 컬럼명을 가져옴 (AS 별칭이 있을 경우를 대비해 getColumnLabel 사용)
-                    String columnName = metaData.getColumnLabel(i);
-                    // 컬럼의 데이터 값을 가져옴
-                    Object value = rs.getObject(i);
+                while (rs.next()) {
+                    Map<String, Object> row = new HashMap<>();
 
-                    // t004 테스트 통과를 위한 타입 변환
-                    if (value instanceof Timestamp) {
+                    for (int i = 1; i <= columnCount; i++) {
+                        // 컬럼명을 가져옴 (AS 별칭이 있을 경우를 대비해 getColumnLabel 사용)
+                        String columnName = metaData.getColumnLabel(i);
+
+                        Object value = rs.getObject(i);
                         // DB의 DATETIME/TIMESTAMP 타입을 Java의 LocalDateTime으로 변환
-                        value = ((Timestamp) value).toLocalDateTime();
-                    } else if (value instanceof Long && metaData.getColumnTypeName(i).equals("BIT")) {
-                        // DB의 BIT(1) 타입을 Java의 boolean으로 변환
-                        value = (long) value == 1;
+                        if (value instanceof Timestamp) {
+                            value = ((Timestamp) value).toLocalDateTime();
+                            // DB의 BIT(1) 타입을 Java의 boolean으로 변환
+                        } else if (value instanceof Long && metaData.getColumnTypeName(i).equals("BIT")) {
+                            value = (long) value == 1;
+                        }
+                        row.put(columnName, value);
                     }
-
-                    row.put(columnName, value);
+                    rows.add(row);
                 }
-                rows.add(row);
             }
-
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-
         return rows;
     }
 
@@ -171,7 +169,7 @@ public class Sql {
         //실행된 쿼리의 결과 가져오기
         Map<String, Object> row = selectRow();
 
-        if (row.isEmpty()) {
+        if (row == null || row.isEmpty()) {
             return null;
         }
         //Map에 들어있는 첫 번째 값(Value)을 꺼내서 LocalDateTime으로 형변환 후 반환
