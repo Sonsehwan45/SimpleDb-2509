@@ -20,7 +20,7 @@ public class SimpleDb {
         try {
             this.conn = DriverManager.getConnection(url, user, passwd);
             System.out.println("DB 연결 성공");
-        } catch (SQLException e) {
+        } catch(SQLException e) {
             throw new RuntimeException(e);
         }
     }
@@ -29,7 +29,7 @@ public class SimpleDb {
         if(conn != null) {
             try {
                 conn.close();
-            } catch (SQLException e) {
+            } catch(SQLException e) {
                 throw new RuntimeException(e);
             } finally {
                 conn = null;
@@ -52,11 +52,14 @@ public class SimpleDb {
         e.printStackTrace(System.err);
     }
 
-
     private void setArgs(PreparedStatement pstmt, Object... args) throws SQLException {
         for(int i=0; i<args.length; i++) {
             pstmt.setObject(i+1, args[i]);
         }
+    }
+
+    public Sql genSql() {
+        return new Sql(this);
     }
 
     @FunctionalInterface
@@ -84,21 +87,21 @@ public class SimpleDb {
         run(sql, PreparedStatement::executeUpdate, args);
     }
 
-
-    public Sql genSql() {
-        return new Sql(this);
-    }
-
     public long insert(String sql, Object... args) {
         return run(sql, pstmt -> {
             pstmt.executeUpdate();
             try(ResultSet rs = pstmt.getGeneratedKeys()) {
-                return rs.next() ? rs.getLong(1) : null;
+                if (rs.next()) return rs.getLong(1);
+                throw new IllegalStateException("생성된 키를 가져올 수 없습니다.");
             }
         }, args);
     }
 
-    public int updateOrDelete(String sql, Object... args) {
+    public int update(String sql, Object... args) {
+        return run(sql, PreparedStatement::executeUpdate, args);
+    }
+
+    public int delete(String sql, Object... args) {
         return run(sql, PreparedStatement::executeUpdate, args);
     }
 

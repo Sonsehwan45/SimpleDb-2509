@@ -18,7 +18,7 @@ public class Sql {
 
     public Sql append(String sql, Object... args) {
         querySb.append(sql).append(" ");
-        if(args != null && args.length > 0) {
+        if(args.length > 0) {
             this.args.addAll(Arrays.asList(args));
         }
         return this;
@@ -29,11 +29,11 @@ public class Sql {
     }
 
     public int update() {
-        return db.updateOrDelete(querySb.toString(), args.toArray());
+        return db.update(querySb.toString(), args.toArray());
     }
 
     public int delete() {
-        return db.updateOrDelete(querySb.toString(), args.toArray());
+        return db.delete(querySb.toString(), args.toArray());
     }
 
     public List<Map<String, Object>> selectRows() {
@@ -52,11 +52,6 @@ public class Sql {
         Map<String, Object> row = selectRow();
         if(row == null || row.isEmpty()) return null;
 
-        /**
-         * AI 추천
-         * 처음에 for문을 구현하고 처음에 발견한 거에서 바로 retun 하는 식으로 구현함
-         * 그러나 어차피 처음 값만 가져올 건데 for문을 구현하는게 비효율적이라고 생각했음
-         */
         Object value = row.values().iterator().next();
         if(type == Boolean.class) {
             if(value instanceof Long) {
