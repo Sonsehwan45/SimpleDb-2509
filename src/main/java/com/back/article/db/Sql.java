@@ -57,6 +57,29 @@ public class Sql {
         return this;
     }
 
+    public Sql appendIn(String sql, Object... args) {
+        if (args == null || args.length == 0) {
+            throw new IllegalArgumentException("appendIn requires at least one argument");
+        }
+
+        // ?를 (?, ?, ...) 형태로 변환
+        StringBuilder placeholders = new StringBuilder();
+        for (int i = 0; i < args.length; i++) {
+            if (i > 0) placeholders.append(", ");
+            placeholders.append("?");
+        }
+
+        // SQL 문자열에서 첫 번째 ?를 (?, ?, ...)로 교체
+        String replacedSql = sql.replaceFirst("\\?", placeholders.toString());
+
+        // params에 값 추가
+        this.params.addAll(Arrays.asList(args));
+
+        // SQL 빌더에 추가 (기존 append 방식 재사용)
+        return append(replacedSql);
+    }
+
+
     /**
      * INSERT 실행 후 자동 생성된 키(Generated Key)를 반환한다.
      *
@@ -247,5 +270,56 @@ public class Sql {
         else if (value instanceof Number) return ((Number) value).intValue() != 0;
         else if (value instanceof String) return Boolean.parseBoolean((String) value);
         else return null;
+    }
+
+    /**
+     * 다중 컬럼을 Long 리스트로 반환
+     */
+    public List<Long> selectLongs() {
+        List<Map<String, Object>> rows = selectRows();
+        List<Long> result = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            if (row.isEmpty()) continue;
+            Object value = row.values().iterator().next();
+            if (value instanceof Number) {
+                result.add(((Number) value).longValue());
+            }
+        }
+        return result;
+    }
+    
+    /**
+     * 다중 컬럼을 Dto 클래스 객체 리스트로 반환
+     */
+    public <T> List<T> selectRows(Class<T> type) {
+        List<Map<String, Object>> rows = selectRows();
+        List<T> result = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            try {
+                T obj = type.getDeclaredConstructor().newInstance();
+                for (Map.Entry<String, Object> entry : row.entrySet()) {
+                    String fieldName = entry.getKey();
+                    Object value = entry.getValue();
+                    try {
+                        var field = type.getDeclaredField(fieldName);
+                        field.setAccessible(true);
+                        field.set(obj, value);
+                    } catch (NoSuchFieldException ignored) {}
+                }
+                result.add(obj);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to map row to " + type.getName(), e);
+            }
+        }
+        return result;
+    }
+    
+    /**
+     * 단일 행을 Dto 클래스 객체로 반환
+     */
+    public <T> T selectRow(Class<T> type) {
+        List<T> rows = selectRows(type);
+        if (rows.isEmpty()) return null;
+        return rows.get(0);
     }
 }

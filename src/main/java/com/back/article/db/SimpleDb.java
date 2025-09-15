@@ -113,4 +113,13 @@ public class SimpleDb {
     public Sql genSql() {
         return new Sql(this);
     }
+
+    /**
+     * SimpleDb 자원 정리
+     *
+     * 👉 애플리케이션 종료 시 호출하여 현재 스레드의 Connection을 닫습니다.
+     */
+    public void close() {
+        closeThreadConnection();
+    }
 }

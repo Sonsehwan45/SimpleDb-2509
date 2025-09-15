@@ -1,4 +1,4 @@
-package com.back.article.domain.entity;
+package com.back.article.domain.dto;
 
 
 import lombok.AllArgsConstructor;
