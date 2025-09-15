@@ -2,10 +2,7 @@ package com.back.domain.article.db;
 
 import java.sql.*;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class Sql {
     private final SimpleDb simpleDb;
@@ -22,6 +19,25 @@ public class Sql {
     public Sql append(String sql, Object... params) {
         rawSql.append(sql).append(" ");
         //받은 파라미터들을 List에 추가
+        for (Object param : params) {
+            this.params.add(param);
+        }
+        return this;
+    }
+
+    public Sql appendIn(String sql, Object... params) {
+        int count = params.length;
+
+        if(count==0){
+            return this;
+        }
+        String placehlders = String.join(", ", Collections.nCopies(count, "?"));
+
+        //WHERE id IN (?)를 파라미터의 개수에 맞게 ?를 추가하게 변경
+        String newSql = sql.replace("?",  placehlders);
+
+        rawSql.append(newSql).append(" ");
+
         for (Object param : params) {
             this.params.add(param);
         }
@@ -117,7 +133,6 @@ public class Sql {
 
         Connection conn = simpleDb.getConnection();
 
-        // Connection, PreparedStatement, ResultSet 모두 try-with-resources로 자원 관리
         try (PreparedStatement pstmt = conn.prepareStatement(rawSql.toString().trim());) {
 
             bindParams(pstmt);
@@ -180,6 +195,8 @@ public class Sql {
         //실행된 쿼리의 결과 가져오기
         Map<String, Object> row = selectRow();
 
+        List<Map<String, Object>> rows = new ArrayList<>();
+
         if (row.isEmpty()) {
             return null;
         }
@@ -222,4 +239,6 @@ public class Sql {
 
         return null;
     }
+
+
 }
