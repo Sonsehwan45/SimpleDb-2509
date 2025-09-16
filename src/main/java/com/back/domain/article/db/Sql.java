@@ -241,4 +241,14 @@ public class Sql {
     }
 
 
+    public List<Long> selectLongs() {
+        List<Long> longList = new ArrayList<>();
+
+        List<Map<String, Object>> rows = selectRows();
+        for (Map<String, Object> row : rows) {
+            Long id = (Long) row.values().iterator().next();
+            longList.add(id);
+        }
+        return longList;
+    }
 }
