@@ -1,5 +1,8 @@
 package com.back.simpleDb;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -55,6 +58,19 @@ public class Sql {
         return db.select(querySb.toString(), args.toArray());
     }
 
+    public <T> List<T> selectRows(Class<T> type) {
+        List<Map<String, Object>> rows = selectRows();
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+
+        List<T> dtoList = new ArrayList<>();
+        for(Map<String, Object> row : rows) {
+            T dto = mapper.convertValue(row, type);
+            dtoList.add(dto);
+        }
+        return dtoList;
+    }
+
     public Map<String, Object> selectRow() {
         List<Map<String, Object>> rows = db.select(querySb.toString(), args.toArray());
         if (rows == null || rows.isEmpty()) {
@@ -62,6 +78,17 @@ public class Sql {
         }
         return rows.getFirst();
     }
+
+    public <T> T selectRow(Class<T> type) {
+        Map<String, Object> row = selectRow();
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+
+        T dto = mapper.convertValue(row, type);
+
+        return dto;
+    }
+
 
     private <T> T selectColumnSingle(Class<T> type) {
         Map<String, Object> row = selectRow();

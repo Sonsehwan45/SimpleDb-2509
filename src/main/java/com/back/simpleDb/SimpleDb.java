@@ -8,31 +8,53 @@ import java.util.*;
 @Setter
 public class SimpleDb {
 
+    private final String url;
+    private final String user;
+    private final String passwd;
     private boolean devMode;
-    private Connection conn;
+    private final ThreadLocal<Connection> threadLocalConn = new ThreadLocal<>();
 
     public SimpleDb(String host, String user, String passwd, String dbName) {
         String url = "jdbc:mysql://" + host + "/" + dbName + "?useSSL=false&serverTimezone=Asia/Seoul";
-        connectDb(url, user, passwd);
+        this.url = url;
+        this.user = user;
+        this.passwd = passwd;
     }
 
-    private void connectDb(String url, String user, String passwd) {
+    private Connection connectDb(String url, String user, String passwd) {
         try {
-            this.conn = DriverManager.getConnection(url, user, passwd);
+            Connection conn = DriverManager.getConnection(url, user, passwd);
             System.out.println("DB 연결 성공");
+            return conn;
         } catch(SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
+    private Connection getConnection() {
+        Connection conn = threadLocalConn.get();
+        try {
+            if(conn == null || conn.isClosed()) {
+                conn = connectDb(url, user, passwd);
+                threadLocalConn.set(conn);
+
+                if(devMode) System.out.println("[ " + Thread.currentThread().getName() + " ]");
+            }
+        } catch(SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return conn;
+    }
+
     public void close() {
+        Connection conn = threadLocalConn.get();
         if(conn != null) {
             try {
                 conn.close();
             } catch(SQLException e) {
                 throw new RuntimeException(e);
             } finally {
-                conn = null;
+                threadLocalConn.remove();
             }
         }
     }
@@ -68,7 +90,7 @@ public class SimpleDb {
     }
 
     private <T> T run(String sql, SqlExecutor<T> executor, Object... args) {
-        try(PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try(PreparedStatement pstmt = getConnection().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
             setArgs(pstmt, args);
 
