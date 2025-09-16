@@ -478,60 +478,60 @@ public class SimpleDbTest {
         // 성공 카운터가 쓰레드 수와 동일한지 확인합니다.
         assertThat(successCounter.get()).isEqualTo(numberOfThreads);
     }
-//
-//    @Test
-//    @DisplayName("rollback")
-//    public void t018() {
-//        // SimpleDB에서 SQL 객체를 생성합니다.
-//        long oldCount = simpleDb.genSql()
-//                .append("SELECT COUNT(*)")
-//                .append("FROM article")
-//                .selectLong();
-//
-//        // 트랜잭션을 시작합니다.
-//        simpleDb.startTransaction();
-//
-//        simpleDb.genSql()
-//                .append("INSERT INTO article ")
-//                .append("(createdDate, modifiedDate, title, body)")
-//                .appendIn("VALUES (NOW(), NOW(), ?)", "새 제목", "새 내용")
-//                .insert();
-//
-//        simpleDb.rollback();
-//
-//        long newCount = simpleDb.genSql()
-//                .append("SELECT COUNT(*)")
-//                .append("FROM article")
-//                .selectLong();
-//
-//        assertThat(newCount).isEqualTo(oldCount);
-//    }
-//
-//    @Test
-//    @DisplayName("commit")
-//    public void t019() {
-//        // SimpleDB에서 SQL 객체를 생성합니다.
-//        long oldCount = simpleDb.genSql()
-//                .append("SELECT COUNT(*)")
-//                .append("FROM article")
-//                .selectLong();
-//
-//        // 트랜잭션을 시작합니다.
-//        simpleDb.startTransaction();
-//
-//        simpleDb.genSql()
-//                .append("INSERT INTO article ")
-//                .append("(createdDate, modifiedDate, title, body)")
-//                .appendIn("VALUES (NOW(), NOW(), ?)", "새 제목", "새 내용")
-//                .insert();
-//
-//        simpleDb.commit();
-//
-//        long newCount = simpleDb.genSql()
-//                .append("SELECT COUNT(*)")
-//                .append("FROM article")
-//                .selectLong();
-//
-//        assertThat(newCount).isEqualTo(oldCount + 1);
-//    }
+
+    @Test
+    @DisplayName("rollback")
+    public void t018() {
+        // SimpleDB에서 SQL 객체를 생성합니다.
+        long oldCount = simpleDb.genSql()
+                .append("SELECT COUNT(*)")
+                .append("FROM article")
+                .selectLong();
+
+        // 트랜잭션을 시작합니다.
+        simpleDb.startTransaction();
+
+        simpleDb.genSql()
+                .append("INSERT INTO article ")
+                .append("(createdDate, modifiedDate, title, body)")
+                .appendIn("VALUES (NOW(), NOW(), ?)", "새 제목", "새 내용")
+                .insert();
+
+        simpleDb.rollback();
+
+        long newCount = simpleDb.genSql()
+                .append("SELECT COUNT(*)")
+                .append("FROM article")
+                .selectLong();
+
+        assertThat(newCount).isEqualTo(oldCount);
+    }
+
+    @Test
+    @DisplayName("commit")
+    public void t019() {
+        // SimpleDB에서 SQL 객체를 생성합니다.
+        long oldCount = simpleDb.genSql()
+                .append("SELECT COUNT(*)")
+                .append("FROM article")
+                .selectLong();
+
+        // 트랜잭션을 시작합니다.
+        simpleDb.startTransaction();
+
+        simpleDb.genSql()
+                .append("INSERT INTO article ")
+                .append("(createdDate, modifiedDate, title, body)")
+                .appendIn("VALUES (NOW(), NOW(), ?)", "새 제목", "새 내용")
+                .insert();
+
+        simpleDb.commit();
+
+        long newCount = simpleDb.genSql()
+                .append("SELECT COUNT(*)")
+                .append("FROM article")
+                .selectLong();
+
+        assertThat(newCount).isEqualTo(oldCount + 1);
+    }
 }

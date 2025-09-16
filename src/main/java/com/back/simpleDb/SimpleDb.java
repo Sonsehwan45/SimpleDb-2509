@@ -59,6 +59,44 @@ public class SimpleDb {
         }
     }
 
+    public void startTransaction() {
+        try {
+            Connection conn = getConnection();
+            conn.setAutoCommit(false);
+            if (devMode) {
+                System.out.println("[" + Thread.currentThread().getName() + "] 트랜잭션 시작");
+            }
+        } catch(SQLException e) {
+            throw new RuntimeException("트랜잭션 시작 실패", e);
+        }
+    }
+
+    public void commit() {
+        try {
+            Connection conn = getConnection();
+            conn.commit();
+            conn.setAutoCommit(true);
+            if (devMode) {
+                System.out.println("[" + Thread.currentThread().getName() + "] 트랜잭션 커밋");
+            }
+        } catch(Exception e) {
+            throw new RuntimeException("커밋 실패", e);
+        }
+    }
+
+    public void rollback() {
+        try {
+            Connection conn = getConnection();
+            conn.rollback();
+            conn.setAutoCommit(true);
+            if (devMode) {
+                System.out.println("[" + Thread.currentThread().getName() + "] 트랜잭션 롤백");
+            }
+        } catch(Exception e) {
+            throw new RuntimeException("롤백 실패", e);
+        }
+    }
+
     private void logSql(String sql, Object... args) {
         if(!devMode) { return; }
         System.out.println("========== SQL ==========");
