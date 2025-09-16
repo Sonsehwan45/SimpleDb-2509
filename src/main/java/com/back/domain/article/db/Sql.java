@@ -168,6 +168,13 @@ public class Sql {
         return rows;
     }
 
+    public <T> List<T> selectRows(Class<T> cls) {
+        List<Map<String, Object>> rows = selectRows();
+        return rows.stream()
+                .map(row -> simpleDb.getObjectMapper().convertValue(row, cls))
+                .toList();
+    }
+
     //혹시 결과가 한개가 아니여도 첫번째 row만 반환
     public Map<String, Object> selectRow() {
         //실행된 쿼리의 결과 가져오기

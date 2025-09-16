@@ -1,5 +1,8 @@
 package com.back.domain.article.db;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -12,6 +15,8 @@ public class SimpleDb {
     final String password;
     // 개발 모드 활성화 여부
     private boolean devMode;
+    //변환된 객체의 정보를 저장
+    private final ObjectMapper objectMapper;
 
     //각 스레드의 Connection을 독립적으로 저장하기 위한 ThreadLocal
     private final ThreadLocal<Connection> connectionThreadLocal;
@@ -23,6 +28,11 @@ public class SimpleDb {
         this.password = password;
         this.devMode = false;
         this.connectionThreadLocal = new ThreadLocal<>();
+        this.objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    }
+
+    ObjectMapper getObjectMapper() {
+        return this.objectMapper;
     }
 
     // 개발자 모드를 설정하는 메서드
