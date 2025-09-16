@@ -122,4 +122,43 @@ public class SimpleDb {
     public void close() {
         closeThreadConnection();
     }
+
+    public void startTransaction() {
+        try {
+            Connection conn = getConnection();
+            conn.setAutoCommit(false);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 트랜잭션 롤백
+     *
+     * 👉 오류 발생 시 트랜잭션을 롤백하고 자동 커밋 모드로 복원합니다.
+     */
+    public void rollback() {
+        try {
+            Connection conn = getConnection();
+            conn.rollback();
+            conn.setAutoCommit(true);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 트랜잭션 커밋
+     *
+     * 👉 모든 작업이 성공적으로 완료되었을 때 트랜잭션을 커밋하고 자동 커밋 모드로 복원합니다.
+     */
+    public void commit() {
+        try {
+            Connection conn = getConnection();
+            conn.commit();
+            conn.setAutoCommit(true);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
