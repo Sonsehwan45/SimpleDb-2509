@@ -49,7 +49,22 @@ threadConnection.remove();
 }
 ```
 
-👉 ThreadLocal을 사용하여 멀티스레드 환경에서도 안전하게 DB Connection을 관리합니다.
+- `getConnection()`  
+  👉 스레드 전용 Connection을 반환. 없거나 닫혀 있으면 새로 생성.
+- `closeThreadConnection()`  
+  👉 스레드 전용 Connection을 종료하고 ThreadLocal에서 제거.
+
+
+### 트랜잭션 관련 메서드
+
+- `startTransaction()`  
+  👉 자동 커밋 모드를 해제하여 트랜잭션 시작.
+- `commit()`  
+  👉 트랜잭션을 커밋하고 자동 커밋 모드로 복원.
+- `rollback()`  
+  👉 트랜잭션을 롤백하고 자동 커밋 모드로 복원.
+- `close()`  
+  👉 애플리케이션 종료 시 현재 스레드의 Connection을 닫음.
 
 ---
 
