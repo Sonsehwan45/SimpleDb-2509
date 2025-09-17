@@ -1,4 +1,4 @@
-package com.back.simpleDb;
+package com.back.SimpleDb;
 
 import com.back.Article;
 import org.junit.jupiter.api.*;
@@ -15,17 +15,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
-import com.back.simpleDb.simpleDb.Sql;
+import com.back.SimpleDb.SimpleDb.Sql;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestMethodOrder(MethodOrderer.MethodName.class)
-public class simpleDbTest {
-    private static simpleDb simpleDb;
+public class SimpleDbTest {
+    private static SimpleDb simpleDb;
 
     @BeforeAll
     public static void beforeAll() {
-        simpleDb = new simpleDb("192.168.50.35:3306", "root", "root123414", "simpleDb__test");
+        simpleDb = new SimpleDb("192.168.50.35:3306", "root", "root123414", "simpleDb__test");
         simpleDb.setDevMode(true);
 
         createArticleTable();
