@@ -239,3 +239,7 @@ testImplementation("org.springframework.boot:spring-boot-starter-test")
 ---
 
 ## 7. 느낀점
+
+기존에 사용하던 JPA, MyBatis 대신 직접 SQL을 작성하고 실행하는 방식을 도입하면서, 
+JDBC의 기본 개념과 멀티스레드 환경에서의 DB 연결 관리에 대해 깊이 이해하게 되었다.
+이를 통해 단순히 ORM을 사용하는 것이 아닌 작동 방식을 이해하는 시간을 가질 수 있었다.
