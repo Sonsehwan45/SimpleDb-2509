@@ -1,10 +1,15 @@
 package com.back.domain.article.db;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class Sql {
+    private static final Logger log = LoggerFactory.getLogger(Sql.class);
     private final SimpleDb simpleDb;
     private final StringBuilder rawSql;
     private final List<Object> params;
@@ -46,15 +51,19 @@ public class Sql {
 
     //전송된 SQL 쿼리 확인을 위한 메서드
     private void logSql() {
-        if(simpleDb.isDevMode()){
-            System.out.println("== rawSql ==");
-            System.out.println(rawSql.toString().trim());
-            if(!params.isEmpty()){
-                System.out.println("== params ==");
-                for(Object param : params){
-                    System.out.println(param);
-                }
+        if (simpleDb.isDevMode() && log.isDebugEnabled()) {
+            StringBuilder logMessage = new StringBuilder();
+            logMessage.append("\n==================== Query Log ====================\n");
+            logMessage.append("SQL      : ").append(rawSql.toString().trim());
+
+            if (!params.isEmpty()) {
+                String paramsString = params.stream()
+                        .map(String::valueOf)
+                        .collect(Collectors.joining(", "));
+                logMessage.append("\nParams   : [").append(paramsString).append("]");
             }
+            logMessage.append("\n=================================================");
+            log.debug(logMessage.toString());
         }
     }
 
