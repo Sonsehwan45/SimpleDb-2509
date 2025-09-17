@@ -1,5 +1,7 @@
 package com.back.article.db;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.sql.*;
 
 /**
@@ -9,6 +11,7 @@ import java.sql.*;
  *
  * 멀티스레드 환경(WebMVC 등)에서 각 스레드가 독립적인 Connection을 사용하도록 ThreadLocal 적용
  */
+@Slf4j
 public class SimpleDb {
     private final String host;
     private final String user;
@@ -93,7 +96,8 @@ public class SimpleDb {
             pstmt.executeUpdate();
 
             if (devMode) {
-                System.out.println("[DEBUG] SQL 실행: " + sql);
+//                System.out.println("[DEBUG] SQL 실행: " + sql);
+                log.debug("SQL 실행: {}", sql);
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
