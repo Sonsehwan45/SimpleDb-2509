@@ -5,7 +5,6 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 public class SimpleDb {
@@ -90,5 +89,31 @@ public class SimpleDb {
 
     public Sql genSql() {
         return new Sql(this);
+    }
+
+    //트랜잭션 시작
+    //자동으로 커밋되지 않게 합니다.
+    public void startTransaction() {
+        try{
+            getConnection().setAutoCommit(false);
+        }catch (SQLException e){
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void commit() {
+        try {
+            getConnection().commit();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void rollback() {
+        try {
+            getConnection().rollback();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

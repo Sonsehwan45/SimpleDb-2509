@@ -187,6 +187,19 @@ public class Sql {
         return rows.getFirst();
     }
 
+    public <T> T selectRow(Class<T> cls) {
+        // 1. 기존 selectRow()를 호출하여 결과를 Map으로 받습니다.
+        Map<String, Object> row = selectRow();
+
+        // 2. 결과가 없으면(null이면) 그대로 null을 반환합니다.
+        if (row == null) {
+            return null;
+        }
+
+        // 3. ObjectMapper를 사용하여 Map을 원하는 클래스(cls)의 객체로 변환하여 반환합니다.
+        return simpleDb.getObjectMapper().convertValue(row, cls);
+    }
+
     public LocalDateTime selectDatetime() {
         //실행된 쿼리의 결과 가져오기
         Map<String, Object> row = selectRow();
