@@ -1,8 +1,7 @@
-package com.back.simpleDb;
+package com.back.SimpleDb;
 
 import com.back.Article;
 import org.junit.jupiter.api.*;
-import org.springframework.test.context.jdbc.Sql;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -16,6 +15,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
+import com.back.SimpleDb.SimpleDb.Sql;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestMethodOrder(MethodOrderer.MethodName.class)
@@ -24,7 +25,7 @@ public class SimpleDbTest {
 
     @BeforeAll
     public static void beforeAll() {
-        simpleDb = new SimpleDb("localhost", "root", "root123414", "simpleDb__test");
+        simpleDb = new SimpleDb("192.168.50.35:3306", "root", "root123414", "simpleDb__test");
         simpleDb.setDevMode(true);
 
         createArticleTable();
