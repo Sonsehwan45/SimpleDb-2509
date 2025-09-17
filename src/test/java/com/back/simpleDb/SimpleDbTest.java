@@ -2,7 +2,7 @@ package com.back.simpleDb;
 
 import com.back.Article;
 import com.back.db.SimpleDb;
-import com.back.db.SimpleDb.Sql;
+import com.back.db.Sql;
 import org.junit.jupiter.api.*;
 
 import java.time.LocalDateTime;

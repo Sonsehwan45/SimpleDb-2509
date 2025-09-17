@@ -147,7 +147,7 @@ public class SimpleDb {
         runTemplate(sql, PreparedStatement::executeUpdate);
     }
 
-    private long runInsert(String sql, Object... args) {
+    long runInsert(String sql, Object... args) {
         return runTemplate(sql, args, statement -> {
             statement.executeUpdate();
             try (ResultSet rs = statement.getGeneratedKeys()) {
@@ -159,15 +159,15 @@ public class SimpleDb {
         });
     }
 
-    private int runUpdate(String sql, Object... args) {
+    int runUpdate(String sql, Object... args) {
         return runTemplate(sql, args, PreparedStatement::executeUpdate);
     }
 
-    private int runDelete(String sql, Object... args) {
+    int runDelete(String sql, Object... args) {
         return runTemplate(sql, args, PreparedStatement::executeUpdate);
     }
 
-    private Map<String, Object> queryRowToMap(String sql, Object... args) {
+    Map<String, Object> queryRowToMap(String sql, Object... args) {
         return runTemplate(sql, args, statement -> {
             ResultSet rs = statement.executeQuery();
             if (rs.next()) {
@@ -187,7 +187,7 @@ public class SimpleDb {
         return row;
     }
 
-    private List<Map<String, Object>> queryRowsToMaps(String sql, Object... args) {
+    List<Map<String, Object>> queryRowsToMaps(String sql, Object... args) {
         return runTemplate(sql, args, statement -> {
             try (ResultSet rs = statement.executeQuery()) {
                 List<Map<String, Object>> rows = new ArrayList<>();
@@ -199,28 +199,19 @@ public class SimpleDb {
         });
     }
 
-    private <T> T queryRow(String sql, Object[] args, Class<T> clazz) {
-        return runTemplate(sql, args, statement -> {
-            try (ResultSet rs = statement.executeQuery()) {
-                ResultSetMetaData metaData = rs.getMetaData();
-                int columnCount = metaData.getColumnCount();
-                if (rs.next()) {
-                    T instance = clazz.getDeclaredConstructor().newInstance();
-                    for (int i = 1; i <= columnCount; i++) {
-                        // TODO : Reflection 데이터 캐싱
-                        bindArguments(clazz, rs, metaData, i, instance);
-                    }
-                    return instance;
-                }
-                return null;
-            } catch (Exception e) {
-                log.error(e.getMessage(), e);
-                throw new RuntimeException(e);
-            }
-        });
+    <T> T queryRow(String sql, Object[] args, Class<T> clazz) {
+        List<T> rows = queryRows(sql, args, clazz);
+        if (rows.isEmpty()) {
+            return null;
+        }
+        if (rows.size() > 1) {
+            log.error("쿼리 결과가 여러개: {}", rows);
+            throw new RuntimeException("쿼리 결과가 여러개" + sql);
+        }
+        return rows.get(0);
     }
 
-    private <T> List<T> queryRows(String sql, Object[] args, Class<T> clazz) {
+    <T> List<T> queryRows(String sql, Object[] args, Class<T> clazz) {
         return runTemplate(sql, args, statement -> {
             List<T> rows = new ArrayList<>();
             try (ResultSet rs = statement.executeQuery()) {
@@ -283,7 +274,7 @@ public class SimpleDb {
         return "set" + columnName.substring(0, 1).toUpperCase() + columnName.substring(1);
     }
 
-    private <T> T queryColumn(String sql, Object... args) {
+    <T> T queryColumn(String sql, Object... args) {
         return runTemplate(sql, args, statement -> {
             try (ResultSet rs = statement.executeQuery()) {
                 if (rs.next()) {
@@ -294,7 +285,7 @@ public class SimpleDb {
         });
     }
 
-    private <T> List<T> queryColumns(String sql, Object... args) {
+    <T> List<T> queryColumns(String sql, Object... args) {
         return runTemplate(sql, args, statement -> {
             try (ResultSet rs = statement.executeQuery()) {
                 List<T> columns = new ArrayList<>();
@@ -306,7 +297,7 @@ public class SimpleDb {
         });
     }
 
-    private Boolean queryBooleanColumn(String sql, Object... args) {
+    Boolean queryBooleanColumn(String sql, Object... args) {
         return runTemplate(sql, args, statement -> {
             try (ResultSet rs = statement.executeQuery()) {
                 if (rs.next()) {
@@ -330,92 +321,6 @@ public class SimpleDb {
     }
 
     public Sql genSql() {
-        return new Sql();
-    }
-
-    public class Sql {
-
-        private final StringBuilder builder;
-        private final List<Object> bindingArgs;
-
-        public Sql() {
-            builder = new StringBuilder();
-            bindingArgs = new ArrayList<>();
-        }
-
-        public Sql append(String sql, Object... args) {
-            builder.append(sql).append(" ");
-            bindingArgs.addAll(Arrays.asList(args));
-            return this;
-        }
-
-        // 가변인자에 아무 것도 전달되지 않아도 String sql만 전달 된다면 append는 컴파일 에러 발생하지않고 잘 작동함
-        // 하지만, 이 메소드가 따로 선언 되는 것이 더 나은 사용자 경험이라고 생각하여 추가하였음
-        // 이는 SimpleDb.run()도 마찬가지임
-        public Sql append(String sql) {
-            builder.append(sql).append(" ");
-            return this;
-        }
-
-        public Sql appendIn(String sql, Object... args) {
-            StringJoiner joiner = new StringJoiner(", ");
-            for (int i = 0; i < args.length; i++) {
-                joiner.add("?");
-            }
-            String replace = sql.replace("?", joiner.toString());
-            builder.append(replace).append(" ");
-
-            bindingArgs.addAll(Arrays.asList(args));
-
-            return this;
-        }
-
-        public long insert() {
-            return SimpleDb.this.runInsert(builder.toString(), bindingArgs.toArray());
-        }
-
-        public int update() {
-            return SimpleDb.this.runUpdate(builder.toString(), bindingArgs.toArray());
-        }
-
-        public int delete() {
-            return SimpleDb.this.runDelete(builder.toString(), bindingArgs.toArray());
-        }
-
-        public Map<String, Object> selectRow() {
-            return SimpleDb.this.queryRowToMap(builder.toString(), bindingArgs.toArray());
-        }
-
-        public <T> T selectRow(Class<T> clazz) {
-            return queryRow(builder.toString(), bindingArgs.toArray(), clazz);
-        }
-
-        public List<Map<String, Object>> selectRows() {
-            return SimpleDb.this.queryRowsToMaps(builder.toString(), bindingArgs.toArray());
-        }
-
-        public <T> List<T> selectRows(Class<T> clazz) {
-            return queryRows(builder.toString(), bindingArgs.toArray(), clazz);
-        }
-
-        public LocalDateTime selectDatetime() {
-            return SimpleDb.this.queryColumn(builder.toString(), bindingArgs.toArray());
-        }
-
-        public Long selectLong() {
-            return SimpleDb.this.queryColumn(builder.toString(), bindingArgs.toArray());
-        }
-
-        public String selectString() {
-            return SimpleDb.this.queryColumn(builder.toString(), bindingArgs.toArray());
-        }
-
-        public List<Long> selectLongs() {
-            return SimpleDb.this.queryColumns(builder.toString(), bindingArgs.toArray());
-        }
-
-        public Boolean selectBoolean() {
-            return SimpleDb.this.queryBooleanColumn(builder.toString(), bindingArgs.toArray());
-        }
+        return new Sql(this);
     }
 }
