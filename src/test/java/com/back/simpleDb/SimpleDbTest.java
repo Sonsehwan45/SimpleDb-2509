@@ -2,7 +2,6 @@ package com.back.simpleDb;
 
 import com.back.Article;
 import org.junit.jupiter.api.*;
-import org.springframework.test.context.jdbc.Sql;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -104,12 +103,12 @@ public class SimpleDbTest {
         // id가 0, 1, 2, 3인 글 수정
         // id가 0인 글은 없으니, 실제로는 3개의 글이 삭제됨
 
-        /*
-        == rawSql ==
-        UPDATE article
-        SET title = '제목 new'
-        WHERE id IN ('0', '1', '2', '3')
-        */
+
+//        == rawSql ==
+//        UPDATE article
+//        SET title = '제목 new'
+//        WHERE id IN ('0', '1', '2', '3')
+
         sql.append("UPDATE article")
                 .append("SET title = ?", "제목 new")
                 .append("WHERE id IN (?, ?, ?, ?)", 0, 1, 2, 3);
@@ -127,11 +126,11 @@ public class SimpleDbTest {
 
         // id가 0, 1, 3인 글 삭제
         // id가 0인 글은 없으니, 실제로는 2개의 글이 삭제됨
-        /*
-        == rawSql ==
-        DELETE FROM article
-        WHERE id IN ('0', '1', '3')
-        */
+
+        //== rawSql ==
+        //DELETE FROM article
+        //WHERE id IN ('0', '1', '3')
+
         sql.append("DELETE")
                 .append("FROM article")
                 .append("WHERE id IN (?, ?, ?)", 0, 1, 3);
@@ -146,13 +145,13 @@ public class SimpleDbTest {
     @DisplayName("selectRows")
     public void t004() {
         Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT *
-        FROM article
-        ORDER BY id ASC
-        LIMIT 3
-        */
+
+        //== rawSql ==
+        //SELECT *
+        //FROM article
+        //ORDER BY id ASC
+        //LIMIT 3
+
         sql.append("SELECT * FROM article ORDER BY id ASC LIMIT 3");
         List<Map<String, Object>> articleRows = sql.selectRows();
 
@@ -176,12 +175,12 @@ public class SimpleDbTest {
     @DisplayName("selectRow")
     public void t005() {
         Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT *
-        FROM article
-        WHERE id = 1
-        */
+
+        //== rawSql ==
+        //SELECT *
+        //FROM article
+        //WHERE id = 1
+
         sql.append("SELECT * FROM article WHERE id = 1");
         Map<String, Object> articleRow = sql.selectRow();
 
@@ -199,16 +198,15 @@ public class SimpleDbTest {
     @DisplayName("selectDatetime")
     public void t006() {
         Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT NOW()
-        */
+
+        //== rawSql ==
+        //SELECT NOW()
+
         sql.append("SELECT NOW()");
 
         LocalDateTime datetime = sql.selectDatetime();
 
         long diff = ChronoUnit.SECONDS.between(datetime, LocalDateTime.now());
-
         assertThat(diff).isLessThanOrEqualTo(1L);
     }
 
@@ -216,12 +214,12 @@ public class SimpleDbTest {
     @DisplayName("selectLong")
     public void t007() {
         Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT id
-        FROM article
-        WHERE id = 1
-        */
+
+//        == rawSql ==
+//        SELECT id
+//        FROM article
+//        WHERE id = 1
+
         sql.append("SELECT id")
                 .append("FROM article")
                 .append("WHERE id = 1");
@@ -235,12 +233,12 @@ public class SimpleDbTest {
     @DisplayName("selectString")
     public void t008() {
         Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT title
-        FROM article
-        WHERE id = 1
-        */
+
+//        == rawSql ==
+//        SELECT title
+//        FROM article
+//        WHERE id = 1
+
         sql.append("SELECT title")
                 .append("FROM article")
                 .append("WHERE id = 1");
@@ -254,12 +252,12 @@ public class SimpleDbTest {
     @DisplayName("selectBoolean")
     public void t009() {
         Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT isBlind
-        FROM article
-        WHERE id = 1
-        */
+
+//        == rawSql ==
+//        SELECT isBlind
+//        FROM article
+//        WHERE id = 1
+
         sql.append("SELECT isBlind")
                 .append("FROM article")
                 .append("WHERE id = 1");
@@ -273,10 +271,10 @@ public class SimpleDbTest {
     @DisplayName("selectBoolean, 2nd")
     public void t010() {
         Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT 1 = 1
-        */
+
+//        == rawSql ==
+//        SELECT 1 = 1
+
         sql.append("SELECT 1 = 1");
 
         Boolean isBlind = sql.selectBoolean();
@@ -288,10 +286,10 @@ public class SimpleDbTest {
     @DisplayName("selectBoolean, 3rd")
     public void t011() {
         Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT 1 = 0
-        */
+
+//        == rawSql ==
+//        SELECT 1 = 0
+
         sql.append("SELECT 1 = 0");
 
         Boolean isBlind = sql.selectBoolean();
@@ -303,17 +301,16 @@ public class SimpleDbTest {
     @DisplayName("select, LIKE 사용법")
     public void t012() {
         Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT COUNT(*)
-        FROM article
-        WHERE id BETWEEN '1' AND '3'
-        AND title LIKE CONCAT('%', '제목' '%')
-        */
+
+//        == rawSql ==
+//        SELECT COUNT(*)
+//        FROM article
+//        WHERE id BETWEEN '1' AND '3'
+//        AND title LIKE CONCAT('%', '제목' '%')
         sql.append("SELECT COUNT(*)")
                 .append("FROM article")
                 .append("WHERE id BETWEEN ? AND ?", 1, 3)
-                .append("AND title LIKE CONCAT('%', ? '%')", "제목");
+                .append("AND title LIKE CONCAT('%', ?, '%')", "제목");
 
         long count = sql.selectLong();
 
@@ -324,12 +321,12 @@ public class SimpleDbTest {
     @DisplayName("appendIn")
     public void t013() {
         Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT COUNT(*)
-        FROM article
-        WHERE id IN ('1', '2', '3')
-        */
+
+//        == rawSql ==
+//        SELECT COUNT(*)
+//        FROM article
+//        WHERE id IN ('1', '2', '3')
+
         sql.append("SELECT COUNT(*)")
                 .append("FROM article")
                 .appendIn("WHERE id IN (?)", 1, 2, 3);
@@ -345,12 +342,12 @@ public class SimpleDbTest {
         Long[] ids = new Long[]{2L, 1L, 3L};
 
         Sql sql = simpleDb.genSql();
-        /*
-        SELECT id
-        FROM article
-        WHERE id IN ('2', '3', '1')
-        ORDER BY FIELD (id, '2', '3', '1')
-        */
+
+//        SELECT id
+//        FROM article
+//        WHERE id IN ('2', '3', '1')
+//        ORDER BY FIELD (id, '2', '3', '1')
+
         sql.append("SELECT id")
                 .append("FROM article")
                 .appendIn("WHERE id IN (?)", ids)
@@ -365,13 +362,13 @@ public class SimpleDbTest {
     @DisplayName("selectRows, Article")
     public void t015() {
         Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT *
-        FROM article
-        ORDER BY id ASC
-        LIMIT 3
-        */
+
+//        == rawSql ==
+//        SELECT *
+//        FROM article
+//        ORDER BY id ASC
+//        LIMIT 3
+
         sql.append("SELECT * FROM article ORDER BY id ASC LIMIT 3");
         List<Article> articleRows = sql.selectRows(Article.class);
 
@@ -395,12 +392,12 @@ public class SimpleDbTest {
     @DisplayName("selectRow, Article")
     public void t016() {
         Sql sql = simpleDb.genSql();
-        /*
-        == rawSql ==
-        SELECT *
-        FROM article
-        WHERE id = 1
-        */
+
+//        == rawSql ==
+//        SELECT *
+//        FROM article
+//        WHERE id = 1
+
         sql.append("SELECT * FROM article WHERE id = 1");
         Article article = sql.selectRow(Article.class);
 
