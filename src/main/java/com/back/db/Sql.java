@@ -9,14 +9,12 @@ import java.util.StringJoiner;
 
 public class Sql {
 
-    private final StringBuilder builder;
-    private final List<Object> bindingArgs;
+    private final StringBuilder builder = new StringBuilder();
+    private final List<Object> bindingArgs = new ArrayList<>();
     private final SimpleDb simpleDb;
 
     Sql(SimpleDb simpleDb) {
         this.simpleDb = simpleDb;
-        builder = new StringBuilder();
-        bindingArgs = new ArrayList<>();
     }
 
     public Sql append(String sql, Object... args) {

@@ -3,23 +3,16 @@ package com.back.db;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.StringJoiner;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +24,8 @@ public class SimpleDb {
     private final String password;
     private final String database;
     private final ThreadLocal<Connection> connectionHolder = new ThreadLocal<>();
+    private final MapMapper mapMapper = new MapMapper();
+    private final EntityMapper entityMapper = new EntityMapper();
 
     private static final int PORT = 3306;
 
@@ -41,7 +36,6 @@ public class SimpleDb {
         this.database = database;
     }
 
-    // TODO : 커넥션 풀을 구현하여 thread-safe 커넥션 획득
     private Connection getConnection() throws SQLException {
         String URL = "jdbc:mysql://" + host + ":" + PORT + "/" + database;
         Connection connection = connectionHolder.get();
@@ -65,7 +59,7 @@ public class SimpleDb {
         log.trace("Args {}", Arrays.toString(args));
         log.info("=======================================");
 
-        // try - with resources (JAVA 7 이상)
+        // Transaction 분기점을 위한 connection 수동 반환
         Connection connection = null;
         try {
             connection = getConnection();
@@ -167,62 +161,40 @@ public class SimpleDb {
         return runTemplate(sql, args, PreparedStatement::executeUpdate);
     }
 
-    Map<String, Object> queryRowToMap(String sql, Object... args) {
-        return runTemplate(sql, args, statement -> {
-            ResultSet rs = statement.executeQuery();
-            if (rs.next()) {
-                return convertRowToMap(rs);
-            }
-            return new HashMap<>();
-        });
-    }
-
-    private Map<String, Object> convertRowToMap(ResultSet rs) throws SQLException {
-        Map<String, Object> row = new HashMap<>();
-        ResultSetMetaData metaData = rs.getMetaData();
-        int columnCount = metaData.getColumnCount();
-        for (int i = 1; i <= columnCount; i++) {
-            row.put(metaData.getColumnName(i), rs.getObject(i));
-        }
-        return row;
-    }
-
     List<Map<String, Object>> queryRowsToMaps(String sql, Object... args) {
         return runTemplate(sql, args, statement -> {
             try (ResultSet rs = statement.executeQuery()) {
                 List<Map<String, Object>> rows = new ArrayList<>();
                 while (rs.next()) {
-                    rows.add(convertRowToMap(rs));
+                    rows.add(mapMapper.mapRow(rs));
                 }
                 return rows;
             }
         });
     }
 
-    <T> T queryRow(String sql, Object[] args, Class<T> clazz) {
-        List<T> rows = queryRows(sql, args, clazz);
+    Map<String, Object> queryRowToMap(String sql, Object... args) {
+        List<Map<String, Object>> rows = queryRowsToMaps(sql, args);
         if (rows.isEmpty()) {
             return null;
         }
-        if (rows.size() > 1) {
-            log.error("쿼리 결과가 여러개: {}", rows);
-            throw new RuntimeException("쿼리 결과가 여러개" + sql);
-        }
+        validUnique(sql, rows);
         return rows.get(0);
+    }
+
+    private <T> void validUnique(String sql, List<T> rows) {
+        if (rows.size() > 1) {
+            log.error("쿼리 결과가 2개 이상: {}", rows);
+            throw new RuntimeException("쿼리 결과가 2개 이상" + sql);
+        }
     }
 
     <T> List<T> queryRows(String sql, Object[] args, Class<T> clazz) {
         return runTemplate(sql, args, statement -> {
             List<T> rows = new ArrayList<>();
             try (ResultSet rs = statement.executeQuery()) {
-                ResultSetMetaData metaData = rs.getMetaData();
-                int columnCount = metaData.getColumnCount();
                 while (rs.next()) {
-                    T instance = clazz.getDeclaredConstructor().newInstance();
-                    for (int i = 1; i <= columnCount; i++) {
-                        // TODO : Reflection 데이터 캐싱
-                        bindArguments(clazz, rs, metaData, i, instance);
-                    }
+                    T instance = entityMapper.mapRow(clazz, rs);
                     rows.add(instance);
                 }
             } catch (Exception e) {
@@ -233,56 +205,13 @@ public class SimpleDb {
         });
     }
 
-    private <T> void bindArguments(Class<T> clazz, ResultSet rs, ResultSetMetaData metaData, int i, T instance)
-            throws SQLException, NoSuchFieldException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
-        String columnName = metaData.getColumnName(i);
-
-        String fieldName = convertCamelCase(columnName);
-        Field field = clazz.getDeclaredField(fieldName);
-
-        String setterName = convertSetterName(fieldName, field.getType());
-        Method setter = clazz.getMethod(setterName, field.getType());
-
-        setter.invoke(instance, rs.getObject(i));
-    }
-
-    private String convertCamelCase(String columnName) {
-        while (columnName.endsWith("_")) {
-            columnName = columnName.substring(0, columnName.length() - 1);
+    <T> T queryRow(String sql, Object[] args, Class<T> clazz) {
+        List<T> rows = queryRows(sql, args, clazz);
+        if (rows.isEmpty()) {
+            return null;
         }
-        StringBuilder sb = new StringBuilder();
-        boolean capitalizeNext = false;
-        for (char c : columnName.toCharArray()) {
-            if (c == '_') {
-                capitalizeNext = true;
-                continue;
-            }
-            if (capitalizeNext) {
-                sb.append(Character.toUpperCase(c));
-                capitalizeNext = false;
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
-
-    private String convertSetterName(String columnName, Class<?> fieldType) {
-        if (fieldType.equals(boolean.class) && columnName.startsWith("is")) {
-            return "set" + columnName.substring(2, 3).toUpperCase() + columnName.substring(3);
-        }
-        return "set" + columnName.substring(0, 1).toUpperCase() + columnName.substring(1);
-    }
-
-    <T> T queryColumn(String sql, Object... args) {
-        return runTemplate(sql, args, statement -> {
-            try (ResultSet rs = statement.executeQuery()) {
-                if (rs.next()) {
-                    return (T) rs.getObject(1);
-                }
-                return null;
-            }
-        });
+        validUnique(sql, rows);
+        return rows.get(0);
     }
 
     <T> List<T> queryColumns(String sql, Object... args) {
@@ -295,6 +224,15 @@ public class SimpleDb {
                 return columns;
             }
         });
+    }
+
+    <T> T queryColumn(String sql, Object... args) {
+        List<T> columns = queryColumns(sql, args);
+        if (columns.isEmpty()) {
+            return null;
+        }
+        validUnique(sql, columns);
+        return columns.get(0);
     }
 
     Boolean queryBooleanColumn(String sql, Object... args) {
