@@ -952,3 +952,513 @@ public class SimpleDb {
 - AI에 따르면, 
   - 추상화 계층 때문에 호출 단계가 늘어나는 것 자체는 성능 문제로 보지 않는다
   - 스레드별 Connection을 따로 제공하면 안전하다
+
+---
+# 순수 JDBC로 DB 유틸리티 구현하기2
+
+## 구현 단위
+- t12 ~ 14 : 조회 테스트 (appendIn, 단일 컬럼 + 여러 행)
+- t15 ~ 16 : 조회 테스트 (DTO)
+- t17 : 멀티 스레드 테스트
+- t18 ~ 19 : 트랜잭션 테스트
+- 로깅 리팩토링
+
+> `t12~ t19`까지의 테스트 케이스를, 위와 같은 구현 단위로 나누어 통과할 수 있도록 개발했습니다.
+---
+
+# 1. 조회 테스트 (appendIn, 단일 컬럼 + 여러 행)
+
+## Sql
+
+<details>
+<summary>Sql 구현 코드</summary>
+
+```java
+@Setter
+public class Sql {
+  //...생략
+  
+  /** IN절 지원 SQL 문자열과 파라미터 추가 */
+  public Sql appendIn(String sql, Object... args) {
+    if(args.length > 0) {
+      this.args.addAll(Arrays.asList(args));
+
+      //하나의 '?'를 args 수에 맞게 확장
+      String placeholder = IntStream.range(0, args.length)
+              .mapToObj(i -> "?")
+              .collect(Collectors.joining(", "));
+      sql = sql.replace("?", placeholder);
+    }
+    querySb.append(sql).append(" ");
+    return this;
+  }
+
+  /** 단일 컬럼 여러 행 조회 */
+  public <T> List<T> selectColumnList(Class<T> type) {
+    List<Map<String, Object>> rows = selectRows();
+
+    //결과가 없다면 빈 List 반환
+    if(rows.isEmpty()) return Collections.emptyList();
+
+    // Map -> 지정 타입 변환 후 리스트 누적
+    List<T> columnList = new ArrayList<>();
+    for (Map<String, Object> row : rows) {
+      //첫번째 컬럼값만 추출
+      Object value = row.values().iterator().next();
+
+      //해당 타입일 경우 list에 추가
+      if(type.isInstance(value)) {
+        columnList.add(type.cast(value));
+      }
+      //해당 타입이 아닐 경우 null 추가
+      else columnList.add(null);
+    }
+    return columnList;
+  }
+
+  /** 단일 컬럼 여러 행 조회, Long 타입 편의 메서드 */
+  public List<Long> selectLongs() {
+    return selectColumnList(Long.class);
+  }
+}
+```
+</details>
+
+
+### 1. appendIn
+```java
+/** IN절 지원 SQL 문자열과 파라미터 추가 */
+public Sql appendIn(String sql, Object... args) {
+  if(args.length > 0) {
+    this.args.addAll(Arrays.asList(args));
+
+    //하나의 '?'를 args 수에 맞게 확장
+    String placeholder = IntStream.range(0, args.length)
+            .mapToObj(i -> "?")
+            .collect(Collectors.joining(", "));
+    sql = sql.replace("?", placeholder);
+  }
+  querySb.append(sql).append(" ");
+  return this;
+}
+```
+- 다중 파라미터 지원
+  - 하나의 `?` 플레이스 홀더에 여러 파라미터인 `args`를 집어넣는 것이 appendIn의 목적
+  - args의 수에 맞게 `?`를 확장하는 것으로 문제를 해결
+
+### 2. 단일 컬럼 여러 행 조회
+```java
+/** 단일 컬럼 여러 행 조회 */
+public <T> List<T> selectColumnList(Class<T> type) {
+  List<Map<String, Object>> rows = selectRows();
+
+  //결과가 없다면 빈 List 반환
+  if(rows.isEmpty()) return Collections.emptyList();
+
+  // Map -> 지정 타입 변환 후 리스트 누적
+  List<T> columnList = new ArrayList<>();
+  for (Map<String, Object> row : rows) {
+    //첫번째 컬럼값만 추출
+    Object value = row.values().iterator().next();
+
+    //해당 타입일 경우 list에 추가
+    if(type.isInstance(value)) {
+      columnList.add(type.cast(value));
+    }
+    //해당 타입이 아닐 경우 null 추가
+    else columnList.add(null);
+  }
+  return columnList;
+}
+
+/** 단일 컬럼 여러 행 조회, Long 타입 편의 메서드 */
+public List<Long> selectLongs() {
+  return selectColumnList(Long.class);
+}
+```
+- 제너릭 메서드 사용
+  - 결과가 여러 행일 때 첫번째 컬럼값만 추출하여 리스트로 반환
+  - 지정한 `type`에 맞는 값만 추가, 타입이 맞지 않으면, `null` 삽입
+  - 빈 결과는 빈 리스트 반환
+  - 편의 메서드를 통해 여러 타입 조회를 간편하게 지원
+
+---
+
+# 2. 조회 테스트 (DTO)
+
+## Sql
+
+<details>
+<summary>Sql 구현 코드</summary>
+
+```java
+@Setter
+public class Sql {
+  //...생략
+
+  /** Map -> DTO 변환 처리를 위한 ObjectMapper */
+  private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+  
+  /** 복수 행 조회 후 DTO 리스트로 변환 */
+  public <T> List<T> selectRows(Class<T> type) {
+    List<Map<String, Object>> rows = selectRows();
+
+    List<T> dtoList = new ArrayList<>();
+
+    //MAP -> DTO 변환
+    for(Map<String, Object> row : rows) {
+      T dto = mapper.convertValue(row, type);
+      dtoList.add(dto);
+    }
+    return dtoList;
+  }
+
+  /** 단일 행 조회 후 DTO 변환 */
+  public <T> T selectRow(Class<T> type) {
+    Map<String, Object> row = selectRow();
+
+    //결과가 있으면 MAP -> DTO로 변환 후 반환
+    if(row == null || row.isEmpty()) { return  null; }
+    return mapper.convertValue(row, type);
+  }
+}
+```
+</details>
+
+
+### 1. Map -> DTO 변환
+```java
+/** IN절 지원 SQL 문자열과 파라미터 추가 */
+/** 복수 행 조회 후 DTO 리스트로 변환 */
+public <T> List<T> selectRows(Class<T> type) {
+  List<Map<String, Object>> rows = selectRows();
+
+  List<T> dtoList = new ArrayList<>();
+
+  //MAP -> DTO 변환
+  for(Map<String, Object> row : rows) {
+    T dto = mapper.convertValue(row, type);
+    dtoList.add(dto);
+  }
+  return dtoList;
+}
+
+/** 단일 행 조회 후 DTO 변환 */
+public <T> T selectRow(Class<T> type) {
+  Map<String, Object> row = selectRow();
+
+  //결과가 있으면 MAP -> DTO로 변환 후 반환
+  if(row == null || row.isEmpty()) { return  null; }
+  return mapper.convertValue(row, type);
+}
+```
+- DTO 변환
+  - `Jackson ObjectMapper`를 사용하여 DTO 변환을 쉽게 처리 
+  - 여러 행을 조회할 경우, 결과가 없으면 빈 List를 반환
+  - 단일 행을 조회할 경우, 결과가 없으면 null 반환
+
+---
+
+# 3. 멀티 스레드 테스트
+
+## SimpleDb
+
+<details>
+<summary>SimpleDb 구현 코드</summary>
+
+```java
+@Setter
+public class SimpleDb {
+  //...생략
+
+  private final ThreadLocal<Connection> threadLocalConn = new ThreadLocal<>();
+
+  /** DB 연결 생성 */
+  private Connection createConnection(String url, String user, String passwd) {
+    try {
+      Connection conn = DriverManager.getConnection(url, user, passwd);
+      logger.db("DB 연결 성공");
+      return conn;
+    } catch(SQLException e) {
+      logger.error("DB 연결 실패", e);
+      throw new RuntimeException(e);
+    }
+  }
+
+  /** 현재 스레드 DB 연결 조회 */
+  private Connection getConnection() {
+    Connection conn = threadLocalConn.get();
+    try {
+      if(conn == null || conn.isClosed()) {
+        conn = createConnection(url, user, passwd);
+        threadLocalConn.set(conn);
+      }
+    } catch(SQLException e) {
+      logger.error("DB 커넥션 조회 실패", e);
+      throw new RuntimeException(e);
+    }
+    return conn;
+  }
+
+  /** 현재 스레드 DB 연결 종료 */
+  public void close() {
+    Connection conn = threadLocalConn.get();
+    if(conn != null) {
+      try {
+        conn.close();
+        logger.db("DB 연결 종료");
+      } catch(SQLException e) {
+        logger.error("DB 연결 종료 실패", e);
+        throw new RuntimeException(e);
+      } finally {
+        threadLocalConn.remove();
+      }
+    }
+  }
+
+  /** SQL 실행 공통 로직 */
+  private <T> T run(String sql, SqlExecutor<T> executor, Object... args) {
+    try(PreparedStatement pstmt = getConnection().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
+      setArgs(pstmt, args);
+
+      T result = executor.execute(pstmt);
+
+      logger.sql(sql, args);
+
+      return result;
+    } catch(SQLException e) {
+      logger.error("SQL 실행 실패", e, sql, args);
+      throw new RuntimeException(e);
+    }
+  }
+}
+```
+</details>
+
+
+### 1. getConnection()
+```java
+/** 현재 스레드 DB 연결 조회 */
+private final ThreadLocal<Connection> threadLocalConn = new ThreadLocal<>();
+
+private Connection getConnection() {
+  Connection conn = threadLocalConn.get();
+  try {
+    if(conn == null || conn.isClosed()) {
+      conn = createConnection(url, user, passwd);
+      threadLocalConn.set(conn);
+    }
+  } catch(SQLException e) {
+    logger.error("DB 커넥션 조회 실패", e);
+    throw new RuntimeException(e);
+  }
+  return conn;
+}
+```
+- `ThreadLocal<Connection>` 사용
+  - 스레드 별로 독립된 DB 커넥션 저장
+  - `getConnection` 메서드를 통해, 현재 스레드에 할당된 커넥션 반환 (`close`, `run`에서 호출)
+
+---
+
+# 4. 트랜잭션 테스트
+
+## SimpleDb
+
+<details>
+<summary>SimpleDb 구현 코드</summary>
+
+```java
+@Setter
+public class SimpleDb {
+  //...생략
+
+  /** 트랜잭션 시작 */
+  public void startTransaction() {
+    try {
+      Connection conn = getConnection();
+      conn.setAutoCommit(false);
+      logger.tx("트랜잭션 시작");
+    } catch(SQLException e) {
+      logger.error("트랜잭션 시작 실패", e);
+      throw new RuntimeException(e);
+    }
+  }
+
+  /** 트랜잭션 커밋 */
+  public void commit() {
+    try {
+      Connection conn = getConnection();
+      conn.commit();
+      conn.setAutoCommit(true);
+      logger.tx("트랜잭션 커밋");
+    } catch(Exception e) {
+      logger.error("트랜잭션 커밋 실패", e);
+      throw new RuntimeException(e);
+    }
+  }
+
+  /** 트랜잭션 롤백 */
+  public void rollback() {
+    try {
+      Connection conn = getConnection();
+      conn.rollback();
+      conn.setAutoCommit(true);
+      logger.tx("트랜잭션 롤백");
+    } catch(Exception e) {
+      logger.error("트랜잭션 롤백 실패", e);
+      throw new RuntimeException(e);
+
+    }
+  }
+}
+```
+</details>
+
+
+### 1. 트랜잭션 시작
+```java
+/** 트랜잭션 시작 */
+public void startTransaction() {
+  try {
+    Connection conn = getConnection();
+    conn.setAutoCommit(false);
+    logger.tx("트랜잭션 시작");
+  } catch(SQLException e) {
+    logger.error("트랜잭션 시작 실패", e);
+    throw new RuntimeException(e);
+  }
+}
+```
+- `setAutoCommit(false)`
+  - 오토커밋 끄기
+    - SQL이 즉시 커밋되지 않고, 이후 `commit()` 호출 시점까지 트랜잭션 단위로 관리되도록 함
+
+### 2. 커밋
+```java
+  /** 트랜잭션 커밋 */
+  public void commit() {
+    try {
+      Connection conn = getConnection();
+      conn.commit();
+      conn.setAutoCommit(true);
+      logger.tx("트랜잭션 커밋");
+    } catch(Exception e) {
+      logger.error("트랜잭션 커밋 실패", e);
+      throw new RuntimeException(e);
+    }
+  }
+```
+- `commit()`
+  - 트랜잭션 시작 후 실행된 SQL 변경 사항을 DB에 반영
+- `setAutoCommit(true)`
+  - 기본 설정을 오토커밋 모드로 가정
+  - 트랜잭션 후 원래 상태로 복원
+
+### 3. 롤백
+```java
+  /** 트랜잭션 롤백 */
+  public void rollback() {
+    try {
+      Connection conn = getConnection();
+      conn.rollback();
+      conn.setAutoCommit(true);
+      logger.tx("트랜잭션 롤백");
+    } catch(Exception e) {
+      logger.error("트랜잭션 롤백 실패", e);
+      throw new RuntimeException(e);
+
+    }
+  }
+```
+- `rollback()`
+  - 트랜잭션 시작 후 실행된 SQL 변경 사항을 취소
+  - `setAutoCommit(true)` 호출로 오토커밋 모드를 원래대로 복원
+  
+---
+
+### 5. 로깅 리팩토링
+- 목적
+  - 기존 `logSql`, `logErr` 메서드는 콘솔 출력에 의존하며,  
+DB 연결이나 트랜잭션 로그까지 포괄하지 못함
+  - 외부 라이브러리 의존성 없이, SQL 실행, 오류, 트랜잭션, DB 연결 로그를 통합 관리하기 위해  
+`simpleDbLogger` 클래스 도입
+
+- 코드
+```java
+@Setter
+public class SimpleDbLogger {
+
+    /** 개발 모드 여부, false면 로그 출력 안함 */
+    private boolean devMode;
+
+    /** 생성자 */
+    SimpleDbLogger(boolean devMode) {
+        this.devMode = devMode;
+    }
+
+    /** 현재 스레드명 반환 */
+    private String thread() {
+        return "[" + Thread.currentThread().getName() + "]";
+    }
+
+    /** SQL 실행 로그 출력 */
+    public void sql(String sql, Object... args) {
+        if(!devMode) return;
+        sql = sql.trim();
+        System.out.println(thread() + "[SQL] " + sql);
+        System.out.println(thread() + "[ARGS] " + Arrays.toString(args));
+    }
+
+    /** 일반 예외 로그 출력 */
+    public void error(String message, Exception e) {
+        if(!devMode) return;
+        System.err.println(thread() + "[ERROR] " + message);
+        e.printStackTrace(System.err);
+    }
+
+    /** SQL 실행 시 예외 로그 출력 */
+    public void error(String message, Exception e, String sql, Object... args) {
+        if(!devMode) return;
+        sql = sql.trim();
+        System.err.println(thread() + "[ERROR] " + message);
+        System.err.println(thread() + "[SQL] " + sql);
+        System.err.println(thread() + "[ARGS] " + Arrays.toString(args));
+        e.printStackTrace(System.err);
+    }
+
+    /** 트랜잭션 로그 출력 (시작, 커밋, 롤백 등) */
+    public void tx(String action) {
+        if(!devMode) return;
+        System.out.println(thread() + "[TX] " + action);
+    }
+
+    /** DB 연결 상태 로그 출력 */
+    public void db(String message) {
+        if(!devMode) return;
+        System.out.println(thread() + "[DB] " + message);
+    }
+}
+```
+- 구조 및 역할
+  1. `devMode`
+     - 개발 모드 여부 플래그
+     - `true`일 때만 로그 출력
+  2. `thread()`
+     - 현재 스레드 이름을 반환
+     - 멀티스레드 환경에서 어느 스레드에서 로그가 발생했는지 확인하기 위함
+  3. `sql(String sql, Object... args`
+     - SQL 실행 시 로그 출력
+     - 실행된 쿼리와 바인딩 된 파라미터 확인 가능
+  4. `error(String message, Exception e)`
+     - 일반 예외 로그 출력
+     - SQL 실행 외, DB 연결 오류 등에서 사용
+  5. `error(String message, Exception e, String sql, Object... args)`
+     - SQL 실행 중 예외 발생 시, 쿼리와 파리미터까지 함께 출력
+  6. `tx(String action)`
+     - 트랜잭션 상태 로그(시작, 커밋, 롤백)
+     - 트랜잭션 수행 흐름을 추적
+  7. `db(String message)`
+     - DB 연결 상태 로그
+     - 연결/해제 성공/실패 시 출력
