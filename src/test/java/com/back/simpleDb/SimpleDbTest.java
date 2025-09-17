@@ -1,8 +1,9 @@
 package com.back.simpleDb;
 
-import com.back.Article;
+import com.back.domain.article.article.entity.Article;
+import com.back.domain.article.db.SimpleDb;
+import com.back.domain.article.db.Sql;
 import org.junit.jupiter.api.*;
-import org.springframework.test.context.jdbc.Sql;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -22,18 +23,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class SimpleDbTest {
     private static SimpleDb simpleDb;
 
-    @BeforeAll
+    @BeforeAll //모든 테스트가 실행되기 전에 딱 한번 실행한다.
     public static void beforeAll() {
         simpleDb = new SimpleDb("localhost", "root", "root123414", "simpleDb__test");
-        simpleDb.setDevMode(true);
+        simpleDb.setDevMode(true); // simpleDb 객체를 개발자 모드로 설정
 
         createArticleTable();
     }
 
-    @BeforeEach
+    @BeforeEach //각 테스트가 메서드가 실행되기 직전에 매번 반복해서 실행
     public void beforeEach() {
-        truncateArticleTable();
-        makeArticleTestData();
+        truncateArticleTable(); //article테이블의 모든 데이터 삭제
+        makeArticleTestData(); // 테스트에 필요한 초기 데이터를 삽입
     }
 
     private static void createArticleTable() {

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- 콘솔에 로그를 출력하는 Appender 설정 -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- 로그 출력 형식 지정 -->
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!--
+    모든 로거의 기본 레벨을 INFO로 설정합니다.
+    이렇게 하면 DEBUG 레벨의 SQL 로그는 기본적으로 보이지 않습니다.
+    -->
+    <root level="INFO">
+        <appender-ref ref="STDOUT" />
+    </root>
+
+    <!--
+    우리 프로젝트(`com.back.domain.article.db`) 패키지에서 발생하는 로그만
+    특별히 DEBUG 레벨까지 모두 보여주도록 설정합니다.
+    -->
+    <logger name="com.back.domain.article.db" level="DEBUG" additivity="false">
+        <appender-ref ref="STDOUT" />
+    </logger>
+
+</configuration>
