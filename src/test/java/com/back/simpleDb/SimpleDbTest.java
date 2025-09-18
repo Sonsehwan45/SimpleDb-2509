@@ -1,8 +1,10 @@
 package com.back.simpleDb;
 
-import com.back.Article;
+import com.back.article.db.SimpleDb;
+import com.back.article.db.Sql;
+import com.back.article.domain.dto.Article;
 import org.junit.jupiter.api.*;
-import org.springframework.test.context.jdbc.Sql;
+import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -18,6 +20,7 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@SpringBootTest
 @TestMethodOrder(MethodOrderer.MethodName.class)
 public class SimpleDbTest {
     private static SimpleDb simpleDb;
