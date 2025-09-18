@@ -98,6 +98,7 @@ public class SimpleDb {
             if (devMode) {
 //                System.out.println("[DEBUG] SQL 실행: " + sql);
                 log.debug("SQL 실행: {}", sql);
+                log.debug("파라미터: {}", (Object) params);
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);

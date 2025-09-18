@@ -1,3 +1,7 @@
 spring:
   application:
     name: back
+logging:
+  level:
+    root: DEBUG
+    com.back.simpleDb: DEBUG
