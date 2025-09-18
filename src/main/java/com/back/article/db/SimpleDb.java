@@ -127,6 +127,12 @@ public class SimpleDb {
         closeThreadConnection();
     }
 
+
+    /**
+     * 트랜잭션 시작
+     *
+     * 👉 자동 커밋 모드를 비활성화하여 트랜잭션을 시작합니다.
+     */
     public void startTransaction() {
         try {
             Connection conn = getConnection();
